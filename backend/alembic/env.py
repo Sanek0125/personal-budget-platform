@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -55,8 +56,6 @@ async def run_async_migrations() -> None:
 
 
 def run_migrations_online() -> None:
-    import asyncio
-
     asyncio.run(run_async_migrations())
 
 

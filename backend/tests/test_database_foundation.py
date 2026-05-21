@@ -1,9 +1,11 @@
 from datetime import date
 from decimal import Decimal
-from typing import get_args
+from pathlib import Path
+from typing import get_args, get_origin
 
-from sqlalchemy import CheckConstraint, inspect
+from sqlalchemy import CheckConstraint, Index, inspect
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.orm import Mapped
 
 from app.db.base import Base
 from app.db.seed_data import COMMON_CURRENCIES
@@ -97,9 +99,16 @@ def test_flexible_enum_fields_have_database_check_constraints() -> None:
 def test_model_defaults_match_database_server_defaults() -> None:
     currencies_table = Base.metadata.tables["currencies"]
     users_table = Base.metadata.tables["users"]
+    workspaces_table = Base.metadata.tables["workspaces"]
+    workspace_members_table = Base.metadata.tables["workspace_members"]
+    exchange_rates_table = Base.metadata.tables["exchange_rates"]
 
     assert currencies_table.c.minor_units.server_default is not None
     assert users_table.c.is_active.server_default is not None
+    assert users_table.c.id.server_default is not None
+    assert workspaces_table.c.id.server_default is not None
+    assert workspace_members_table.c.id.server_default is not None
+    assert exchange_rates_table.c.id.server_default is not None
 
 
 def test_exchange_rate_python_types_match_database_column_types() -> None:
@@ -118,3 +127,75 @@ def test_exchange_rate_python_types_match_database_column_types() -> None:
 
     assert rate.rate == Decimal("90.000000000000")
     assert rate.rate_date == date(2026, 5, 21)
+
+
+def test_fk_columns_have_query_indexes() -> None:
+    expected_indexes = {
+        "workspaces": {"ix_workspaces_owner_user_id": ("owner_user_id",)},
+        "workspace_members": {
+            "ix_workspace_members_user_id": ("user_id",),
+            "ix_workspace_members_workspace_id": ("workspace_id",),
+        },
+        "exchange_rates": {"ix_exchange_rates_rate_date": ("rate_date",)},
+    }
+
+    for table_name, indexes in expected_indexes.items():
+        table = Base.metadata.tables[table_name]
+        actual = {
+            index.name: tuple(column.name for column in index.columns)
+            for index in table.indexes
+            if isinstance(index, Index)
+        }
+
+        for index_name, columns in indexes.items():
+            assert actual[index_name] == columns
+
+
+def test_direct_sql_deletes_match_orm_cascade_intent() -> None:
+    expected_ondelete = {
+        ("workspaces", "owner_user_id"): "CASCADE",
+        ("workspace_members", "workspace_id"): "CASCADE",
+        ("workspace_members", "user_id"): "CASCADE",
+    }
+
+    for (table_name, column_name), expected in expected_ondelete.items():
+        column = Base.metadata.tables[table_name].c[column_name]
+        assert next(iter(column.foreign_keys)).ondelete == expected
+
+
+def test_workspace_member_tracks_role_updates() -> None:
+    table = Base.metadata.tables["workspace_members"]
+
+    assert "updated_at" in table.c
+    assert table.c.updated_at.server_default is not None
+
+
+def test_user_display_name_rejects_blank_values() -> None:
+    constraint_names = {
+        constraint.name
+        for constraint in Base.metadata.tables["users"].constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+
+    assert "ck_users_display_name_not_blank" in constraint_names
+
+
+def test_relationship_annotations_are_typed_with_mapped() -> None:
+    relationship_annotations = {
+        Workspace: ["owner", "currency", "members"],
+        WorkspaceMember: ["workspace", "user"],
+        ExchangeRate: ["base_currency", "quote_currency"],
+    }
+
+    for model, relationship_names in relationship_annotations.items():
+        for relationship_name in relationship_names:
+            assert get_origin(model.__annotations__[relationship_name]) is Mapped
+
+
+def test_migration_reuses_common_currency_seed_data() -> None:
+    migration_path = Path("alembic/versions/20260521_0001_database_foundation.py")
+    migration = migration_path.read_text()
+
+    assert "from app.db.seed_data import COMMON_CURRENCIES" in migration
+    assert "for currency in COMMON_CURRENCIES" in migration
+    assert "Russian Ruble" not in migration

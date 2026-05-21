@@ -2,7 +2,16 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Text, func, true
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Text,
+    func,
+    text,
+    true,
+)
 from sqlalchemy.dialects.postgresql import CITEXT, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -16,16 +25,23 @@ class User(Base):
     """Application user identity with optional Telegram linkage."""
 
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "btrim(display_name) != ''",
+            name="ck_users_display_name_not_blank",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()"),
     )
-    email: Mapped[str | None] = mapped_column(CITEXT(), unique=True, nullable=True)
-    password_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
-    display_name: Mapped[str] = mapped_column(Text, nullable=False)
-    telegram_id: Mapped[int | None] = mapped_column(
-        BigInteger, unique=True, nullable=True
-    )
+    email: Mapped[str | None] = mapped_column(CITEXT(), unique=True)
+    password_hash: Mapped[str | None] = mapped_column(Text)
+    display_name: Mapped[str] = mapped_column(Text)
+    telegram_id: Mapped[int | None] = mapped_column(BigInteger, unique=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
