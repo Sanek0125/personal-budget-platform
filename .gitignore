@@ -26,7 +26,9 @@ build/
 .idea/
 .vscode/
 
-# Hermes local planning/session files; keep committed implementation plans
+# Hermes local planning/session files; keep committed implementation plans/workflows
 .hermes/*
 !.hermes/plans/
 !.hermes/plans/*.md
+!.hermes/workflows/
+!.hermes/workflows/*.md
