@@ -1,9 +1,9 @@
 # Phase 4 Plan — Transactions, Splits, Transfers
 
-**Repo:** `/home/primalex/projects/personal-budget-platform`  
-**Branch:** `feat/transactions-splits`  
-**Plan file:** `.hermes/plans/2026-05-21_phase-4-transactions-splits.md`  
-**Parent plan:** `.hermes/plans/2026-05-21_141258-personal-budget-platform.md` Phase 4  
+**Repo:** `/home/primalex/projects/personal-budget-platform`
+**Branch:** `feat/transactions-splits`
+**Plan file:** `.hermes/plans/2026-05-21_phase-4-transactions-splits.md`
+**Parent plan:** `.hermes/plans/2026-05-21_141258-personal-budget-platform.md` Phase 4
 **Role:** Planner only — do not implement production code in this planning task.
 
 ## 1. Goal
