@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from app.api.accounts import router as accounts_router
 from app.api.categories import router as categories_router
+from app.api.transactions import router as transactions_router
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -12,6 +13,7 @@ app = FastAPI(
 )
 app.include_router(accounts_router)
 app.include_router(categories_router)
+app.include_router(transactions_router)
 
 
 @app.get("/health", tags=["system"])

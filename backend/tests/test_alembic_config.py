@@ -16,7 +16,7 @@ def test_alembic_has_single_head_revision() -> None:
 
     heads = [line for line in result.stdout.splitlines() if line.strip()]
     assert len(heads) == 1
-    assert "20260521_0002" in heads[0]
+    assert "20260521_0003" in heads[0]
 
 
 def test_alembic_migration_references_common_currency_seed_data() -> None:
