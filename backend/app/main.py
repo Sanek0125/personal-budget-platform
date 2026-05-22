@@ -8,6 +8,7 @@ from app.api.debts import router as debts_router
 from app.api.imports import router as imports_router
 from app.api.rewards import router as rewards_router
 from app.api.transactions import router as transactions_router
+from app.api.workspaces import router as workspaces_router
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -24,6 +25,7 @@ app.include_router(debts_router)
 app.include_router(imports_router)
 app.include_router(rewards_router)
 app.include_router(transactions_router)
+app.include_router(workspaces_router)
 
 
 @app.get("/health", tags=["system"])
