@@ -1,5 +1,6 @@
 from app.models.account import Account
 from app.models.category import Category
+from app.models.category_rule import CategoryRule, CategoryRuleMatch
 from app.models.currency import Currency
 from app.models.exchange_rate import ExchangeRate
 from app.models.imports import DuplicateCandidate, File, ImportBatch, ImportRow
@@ -10,6 +11,8 @@ from app.models.workspace import Workspace, WorkspaceMember
 __all__ = [
     "Account",
     "Category",
+    "CategoryRule",
+    "CategoryRuleMatch",
     "Currency",
     "DuplicateCandidate",
     "ExchangeRate",
