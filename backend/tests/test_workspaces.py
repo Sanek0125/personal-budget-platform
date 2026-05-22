@@ -114,6 +114,19 @@ def test_workspace_schema_rejects_blank_names(blank_name: str) -> None:
         )
 
 
+@pytest.mark.parametrize("bad_currency", [None, 123])
+def test_workspace_schema_rejects_non_string_currency_codes(
+    bad_currency: object,
+) -> None:
+    with pytest.raises(ValidationError):
+        WorkspaceCreate(
+            name="Personal",
+            kind="personal",
+            base_currency_code=bad_currency,  # type: ignore[arg-type]
+            owner_user_id=uuid4(),
+        )
+
+
 async def test_create_workspace_creates_owner_membership() -> None:
     owner_user_id = uuid4()
     session = _FakeAsyncSession(owner_user_id, "USD")
@@ -220,23 +233,33 @@ async def test_get_workspace_returns_404_when_missing() -> None:
     session = _FakeAsyncSession(None)
 
     with pytest.raises(HTTPException) as exc_info:
-        await get_workspace(uuid4(), session)  # type: ignore[arg-type]
+        await get_workspace(uuid4(), uuid4(), session)  # type: ignore[arg-type]
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.detail == "Workspace not found"
+
+
+async def test_get_workspace_returns_workspace_for_member() -> None:
+    workspace = _workspace()
+    session = _FakeAsyncSession(workspace)
+
+    result = await get_workspace(workspace.id, uuid4(), session)  # type: ignore[arg-type]
+
+    assert result is workspace
+    assert len(session.statements) == 1
 
 
 async def test_list_workspace_members_returns_404_when_workspace_missing() -> None:
     session = _FakeAsyncSession(None)
 
     with pytest.raises(HTTPException) as exc_info:
-        await list_workspace_members(uuid4(), session)  # type: ignore[arg-type]
+        await list_workspace_members(uuid4(), uuid4(), session)  # type: ignore[arg-type]
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.detail == "Workspace not found"
 
 
-async def test_list_workspace_members_returns_members() -> None:
+async def test_list_workspace_members_returns_members_for_member() -> None:
     workspace_id = uuid4()
     members = [
         WorkspaceMember(
@@ -250,7 +273,11 @@ async def test_list_workspace_members_returns_members() -> None:
     ]
     session = _FakeAsyncSession(workspace_id, members)
 
-    result = await list_workspace_members(workspace_id, session)  # type: ignore[arg-type]
+    result = await list_workspace_members(  # type: ignore[arg-type]
+        workspace_id,
+        uuid4(),
+        session,
+    )
 
     assert result == members
     assert len(session.statements) == 2

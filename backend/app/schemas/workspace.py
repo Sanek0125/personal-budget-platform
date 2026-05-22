@@ -24,7 +24,9 @@ class WorkspaceCreate(BaseModel):
 
     @field_validator("base_currency_code", mode="before")
     @classmethod
-    def normalize_currency_code(cls, value: str) -> str:
+    def normalize_currency_code(cls, value: object) -> str:
+        if not isinstance(value, str):
+            raise ValueError("Currency code must be a string")
         return value.strip().upper()
 
 
