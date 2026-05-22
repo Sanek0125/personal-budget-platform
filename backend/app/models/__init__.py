@@ -1,4 +1,5 @@
 from app.models.account import Account
+from app.models.budget import Budget, BudgetLimit
 from app.models.category import Category
 from app.models.category_rule import CategoryRule, CategoryRuleMatch
 from app.models.currency import Currency
@@ -10,6 +11,8 @@ from app.models.workspace import Workspace, WorkspaceMember
 
 __all__ = [
     "Account",
+    "Budget",
+    "BudgetLimit",
     "Category",
     "CategoryRule",
     "CategoryRuleMatch",
