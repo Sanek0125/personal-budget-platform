@@ -3,6 +3,7 @@ from app.models.budget import Budget, BudgetLimit
 from app.models.category import Category
 from app.models.category_rule import CategoryRule, CategoryRuleMatch
 from app.models.currency import Currency
+from app.models.debt import Contact, Debt, DebtPayment
 from app.models.exchange_rate import ExchangeRate
 from app.models.imports import DuplicateCandidate, File, ImportBatch, ImportRow
 from app.models.transaction import Transaction, TransactionLink, TransactionSplit
@@ -16,7 +17,10 @@ __all__ = [
     "Category",
     "CategoryRule",
     "CategoryRuleMatch",
+    "Contact",
     "Currency",
+    "Debt",
+    "DebtPayment",
     "DuplicateCandidate",
     "ExchangeRate",
     "File",
