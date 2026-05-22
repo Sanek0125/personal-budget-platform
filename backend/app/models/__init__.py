@@ -6,6 +6,7 @@ from app.models.currency import Currency
 from app.models.debt import Contact, Debt, DebtPayment
 from app.models.exchange_rate import ExchangeRate
 from app.models.imports import DuplicateCandidate, File, ImportBatch, ImportRow
+from app.models.reward import CashbackRule, RewardEvent, RewardProgram
 from app.models.transaction import Transaction, TransactionLink, TransactionSplit
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMember
@@ -26,6 +27,9 @@ __all__ = [
     "File",
     "ImportBatch",
     "ImportRow",
+    "RewardProgram",
+    "RewardEvent",
+    "CashbackRule",
     "Transaction",
     "TransactionLink",
     "TransactionSplit",

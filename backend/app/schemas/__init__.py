@@ -23,6 +23,16 @@ from app.schemas.debt import (
     DebtSummaryRead,
     DebtSummaryTotal,
 )
+from app.schemas.reward import (
+    CashbackRuleCreate,
+    CashbackRuleRead,
+    ExpectedRewardRead,
+    ExpectedRewardRequest,
+    RewardEventCreate,
+    RewardEventRead,
+    RewardProgramCreate,
+    RewardProgramRead,
+)
 from app.schemas.transaction import (
     TransactionCreate,
     TransactionRead,
@@ -55,6 +65,14 @@ __all__ = [
     "DebtRead",
     "DebtSummaryRead",
     "DebtSummaryTotal",
+    "RewardProgramCreate",
+    "RewardProgramRead",
+    "RewardEventCreate",
+    "RewardEventRead",
+    "CashbackRuleCreate",
+    "CashbackRuleRead",
+    "ExpectedRewardRequest",
+    "ExpectedRewardRead",
     "TransactionCreate",
     "TransactionRead",
     "TransactionSplitCreate",
