@@ -138,7 +138,6 @@ def _set_fingerprint(transaction: Transaction) -> None:
         amount=transaction.amount,
         currency_code=transaction.currency_code,
         description=transaction.description,
-        source=transaction.source,
         external_id=transaction.external_id,
     )
 

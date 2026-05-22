@@ -2,16 +2,13 @@
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from hashlib import sha256
 from uuid import UUID
 
 from app.db.base import Base
 from app.services.transaction_fingerprints import (
     build_transaction_fingerprint,
-    normalize_amount,
-    normalize_currency_code,
-    normalize_description,
-    normalize_external_id,
-    normalize_whitespace,
+    decimal_fingerprint_text,
 )
 
 _OCCURRED_AT = datetime(2026, 5, 21, 9, 30, tzinfo=UTC)
@@ -26,53 +23,15 @@ def _fingerprint(**overrides: object) -> str:
         "amount": Decimal("-12.00"),
         "currency_code": "USD",
         "description": "Coffee Shop",
-        "source": "manual",
         "external_id": None,
     }
     params.update(overrides)
     return build_transaction_fingerprint(**params)
 
 
-# --- normalization helpers -------------------------------------------------
-
-
-def test_normalize_whitespace_trims_and_collapses() -> None:
-    assert normalize_whitespace("  Coffee \t  Shop  ") == "Coffee Shop"
-
-
-def test_normalize_description_collapses_whitespace_and_uppercases() -> None:
-    assert normalize_description("  flat   white ") == "FLAT WHITE"
-
-
-def test_normalize_currency_code_trims_and_uppercases() -> None:
-    assert normalize_currency_code(" usd ") == "USD"
-
-
-def test_normalize_amount_is_scale_independent() -> None:
-    assert normalize_amount(Decimal("-12.0")) == normalize_amount(
-        Decimal("-12.000000")
-    )
-
-
-def test_normalize_amount_keeps_significant_digits() -> None:
-    assert normalize_amount(Decimal("-12.34")) != normalize_amount(Decimal("-12.00"))
-
-
-def test_normalize_amount_uses_plain_notation() -> None:
-    assert normalize_amount(Decimal("100")) == "100"
-
-
-def test_normalize_amount_collapses_negative_zero() -> None:
-    assert normalize_amount(Decimal("-0.00")) == normalize_amount(Decimal("0"))
-
-
-def test_normalize_external_id_trims_and_blanks_to_none() -> None:
-    assert normalize_external_id("  bank-1 ") == "bank-1"
-    assert normalize_external_id("   ") is None
-    assert normalize_external_id(None) is None
-
-
-# --- intrinsic fingerprint -------------------------------------------------
+def test_decimal_fingerprint_text_matches_legacy_normalize_rendering() -> None:
+    assert decimal_fingerprint_text(Decimal("-12.00")) == "-12"
+    assert decimal_fingerprint_text(Decimal("100.00")) == "1E+2"
 
 
 def test_fingerprint_is_deterministic() -> None:
@@ -85,11 +44,36 @@ def test_fingerprint_is_sha256_hex() -> None:
     assert all(char in "0123456789abcdef" for char in value)
 
 
-def test_same_logical_transaction_ignores_whitespace_case_and_scale() -> None:
-    assert _fingerprint() == _fingerprint(
-        description="  coffee    SHOP ",
-        amount=Decimal("-12.000000"),
-        currency_code="usd",
+def test_fingerprint_matches_legacy_route_algorithm() -> None:
+    workspace_id = UUID(int=1)
+    account_id = UUID(int=2)
+    raw = "|".join(
+        [
+            str(workspace_id),
+            str(account_id),
+            "expense",
+            _OCCURRED_AT.isoformat(),
+            str(Decimal("-12.00").normalize()),
+            "USD",
+            "Coffee Shop",
+            "",
+        ]
+    )
+
+    assert _fingerprint(workspace_id=workspace_id, account_id=account_id) == sha256(
+        raw.encode("utf-8")
+    ).hexdigest()
+
+
+def test_amount_scale_matches_legacy_behavior() -> None:
+    assert _fingerprint(amount=Decimal("-12.0")) == _fingerprint(
+        amount=Decimal("-12.000000")
+    )
+
+
+def test_description_case_and_whitespace_match_legacy_behavior() -> None:
+    assert _fingerprint(description="Coffee Shop") != _fingerprint(
+        description="  coffee    SHOP "
     )
 
 
@@ -116,48 +100,21 @@ def test_fingerprint_is_scoped_to_account_and_workspace() -> None:
     assert base != _fingerprint(workspace_id=UUID(int=999))
 
 
-# --- external-id fingerprint ----------------------------------------------
-
-
-def test_external_id_fingerprint_ignores_description_noise() -> None:
+def test_external_id_participates_in_legacy_fingerprint() -> None:
     base = _fingerprint(external_id="BANK-001")
-    assert base == _fingerprint(
-        external_id="BANK-001", description="  totally   different TEXT "
-    )
-    assert base == _fingerprint(external_id="  BANK-001 ")
-
-
-def test_external_id_fingerprint_ignores_amount_and_time() -> None:
-    base = _fingerprint(external_id="BANK-001")
-    assert base == _fingerprint(
+    assert base != _fingerprint(external_id="BANK-002")
+    assert base != _fingerprint(external_id=None)
+    assert base != _fingerprint(
         external_id="BANK-001",
         amount=Decimal("-999.99"),
         occurred_at=datetime(2000, 1, 1, tzinfo=UTC),
+        description="totally different",
     )
 
 
-def test_external_id_fingerprint_is_scoped() -> None:
-    base = _fingerprint(external_id="BANK-001")
-    assert base != _fingerprint(external_id="BANK-001", account_id=UUID(int=999))
-    assert base != _fingerprint(external_id="BANK-001", workspace_id=UUID(int=999))
-    assert base != _fingerprint(external_id="BANK-001", source="csv_import")
-
-
-def test_external_id_fingerprint_distinguishes_ids() -> None:
-    assert _fingerprint(external_id="BANK-001") != _fingerprint(
-        external_id="BANK-002"
-    )
-
-
-def test_blank_external_id_falls_back_to_intrinsic_fingerprint() -> None:
-    assert _fingerprint(external_id="   ") == _fingerprint(external_id=None)
-
-
-def test_external_and_intrinsic_modes_do_not_collide() -> None:
-    assert _fingerprint(external_id="x") != _fingerprint(external_id=None)
-
-
-# --- soft-delete reimport --------------------------------------------------
+def test_blank_external_id_matches_legacy_empty_string_behavior() -> None:
+    assert _fingerprint(external_id="") == _fingerprint(external_id=None)
+    assert _fingerprint(external_id="   ") != _fingerprint(external_id=None)
 
 
 def test_active_fingerprint_index_excludes_soft_deleted_rows() -> None:

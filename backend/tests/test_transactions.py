@@ -999,7 +999,7 @@ async def test_update_transaction_rejects_direct_transfer_edit() -> None:
         raise AssertionError("direct transfer transaction edits should be rejected")
 
 
-async def test_create_transaction_fingerprint_normalizes_input() -> None:
+async def test_create_transaction_fingerprint_keeps_legacy_semantics() -> None:
     workspace_id = uuid4()
     account_id = uuid4()
 
@@ -1019,10 +1019,10 @@ async def test_create_transaction_fingerprint_normalizes_input() -> None:
         clean_session,  # type: ignore[arg-type]
     )
 
-    noisy_session = _FakeAsyncSession(
+    same_amount_scale_session = _FakeAsyncSession(
         workspace_id, _account(workspace_id, account_id=account_id)
     )
-    noisy = await create_transaction(
+    same_amount_scale = await create_transaction(
         workspace_id,
         TransactionCreate(
             account_id=account_id,
@@ -1030,12 +1030,29 @@ async def test_create_transaction_fingerprint_normalizes_input() -> None:
             occurred_at=datetime(2026, 5, 21, tzinfo=UTC),
             amount=Decimal("-12.000000"),
             currency_code="USD",
-            description="  coffee   SHOP ",
+            description="Coffee Shop",
         ),
-        noisy_session,  # type: ignore[arg-type]
+        same_amount_scale_session,  # type: ignore[arg-type]
     )
 
-    assert clean.fingerprint == noisy.fingerprint
+    changed_description_session = _FakeAsyncSession(
+        workspace_id, _account(workspace_id, account_id=account_id)
+    )
+    changed_description = await create_transaction(
+        workspace_id,
+        TransactionCreate(
+            account_id=account_id,
+            type="expense",
+            occurred_at=datetime(2026, 5, 21, tzinfo=UTC),
+            amount=Decimal("-12.00"),
+            currency_code="USD",
+            description="  coffee   SHOP ",
+        ),
+        changed_description_session,  # type: ignore[arg-type]
+    )
+
+    assert clean.fingerprint == same_amount_scale.fingerprint
+    assert clean.fingerprint != changed_description.fingerprint
 
 
 def _fingerprint_integrity_error() -> IntegrityError:
@@ -1195,49 +1212,6 @@ async def test_integrity_error_without_fingerprint_index_stays_generic() -> None
         assert session.rolled_back is True
     else:
         raise AssertionError("non-fingerprint integrity errors stay a generic 409")
-
-
-async def test_create_transaction_same_external_id_yields_same_fingerprint() -> None:
-    workspace_id = uuid4()
-    account_id = uuid4()
-
-    first_session = _FakeAsyncSession(
-        workspace_id, _account(workspace_id, account_id=account_id)
-    )
-    first = await create_transaction(
-        workspace_id,
-        TransactionCreate(
-            account_id=account_id,
-            type="expense",
-            occurred_at=datetime(2026, 5, 21, tzinfo=UTC),
-            amount=Decimal("-12.00"),
-            currency_code="USD",
-            description="Coffee Shop",
-            source="api",
-            external_id="ext-123",
-        ),
-        first_session,  # type: ignore[arg-type]
-    )
-
-    second_session = _FakeAsyncSession(
-        workspace_id, _account(workspace_id, account_id=account_id)
-    )
-    second = await create_transaction(
-        workspace_id,
-        TransactionCreate(
-            account_id=account_id,
-            type="expense",
-            occurred_at=datetime(2026, 6, 30, tzinfo=UTC),
-            amount=Decimal("-999.99"),
-            currency_code="USD",
-            description="  totally   different  merchant ",
-            source="api",
-            external_id="ext-123",
-        ),
-        second_session,  # type: ignore[arg-type]
-    )
-
-    assert first.fingerprint == second.fingerprint
 
 
 async def test_distinct_descriptions_produce_distinct_fingerprints() -> None:
