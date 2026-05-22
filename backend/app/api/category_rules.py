@@ -93,16 +93,22 @@ async def create_category_rule(
 
 
 @router.patch(
-    "/category-rules/{rule_id}",
+    "/workspaces/{workspace_id}/category-rules/{rule_id}",
     response_model=CategoryRuleRead,
 )
 async def update_category_rule(
+    workspace_id: UUID,
     rule_id: UUID,
     payload: CategoryRuleUpdate,
     session: SessionDep,
 ) -> CategoryRule:
+    # Scope the lookup to the workspace so a rule cannot be updated across
+    # tenants; a rule in another workspace reads as "not found".
     result = await session.execute(
-        select(CategoryRule).where(CategoryRule.id == rule_id)
+        select(CategoryRule).where(
+            CategoryRule.id == rule_id,
+            CategoryRule.workspace_id == workspace_id,
+        )
     )
     rule = result.scalar_one_or_none()
     if rule is None:
@@ -150,9 +156,24 @@ async def apply_category_rules(
             Transaction.workspace_id == workspace_id,
             Transaction.category_id.is_(None),
             Transaction.deleted_at.is_(None),
+            # Only auto-categorize live ledger rows; never touch transactions
+            # marked duplicate, ignored, deleted, or still pending.
+            Transaction.status == "posted",
         )
     )
     transactions = list(tx_result.scalars().all())
+
+    # Match rows are unique on (category_rule_id, transaction_id). A
+    # transaction that was categorized and later uncategorized can be matched
+    # by the same rule again; re-inserting its audit row would trip the
+    # unique constraint, so skip matches that already exist.
+    existing_result = await session.execute(
+        select(
+            CategoryRuleMatch.category_rule_id,
+            CategoryRuleMatch.transaction_id,
+        ).where(CategoryRuleMatch.workspace_id == workspace_id)
+    )
+    existing_matches = {tuple(row) for row in existing_result.all()}
 
     categorized_ids: list[UUID] = []
     for transaction in transactions:
@@ -161,15 +182,16 @@ async def apply_category_rules(
             continue
         transaction.category_id = rule.category_id
         transaction.categorized_by = "rule"
-        session.add(
-            CategoryRuleMatch(
-                id=uuid4(),
-                workspace_id=workspace_id,
-                category_rule_id=rule.id,
-                transaction_id=transaction.id,
-                matched_value=getattr(transaction, rule.match_field, None),
+        if (rule.id, transaction.id) not in existing_matches:
+            session.add(
+                CategoryRuleMatch(
+                    id=uuid4(),
+                    workspace_id=workspace_id,
+                    category_rule_id=rule.id,
+                    transaction_id=transaction.id,
+                    matched_value=getattr(transaction, rule.match_field, None),
+                )
             )
-        )
         categorized_ids.append(transaction.id)
 
     await session.commit()

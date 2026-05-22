@@ -16,9 +16,12 @@ from app.db.base import Base
 from app.models import Category, CategoryRule, CategoryRuleMatch, Transaction
 from app.schemas.category_rule import CategoryRuleCreate, CategoryRuleUpdate
 from app.services.category_rules import (
+    MAX_REGEX_INPUT_LENGTH,
+    MAX_REGEX_PATTERN_LENGTH,
     OPERATOR_PRIORITY,
     find_matching_rule,
     rule_matches,
+    validate_rule_definition,
 )
 
 
@@ -344,10 +347,12 @@ async def test_list_category_rules_returns_rules() -> None:
 
 
 async def test_update_category_rule_applies_changes() -> None:
-    rule = _rule()
+    workspace_id = uuid4()
+    rule = _rule(workspace_id)
     session = _FakeAsyncSession(rule)
 
     updated = await update_category_rule(
+        workspace_id,
         rule.id,
         CategoryRuleUpdate(name="Renamed", priority=5, is_active=False),
         session,  # type: ignore[arg-type]
@@ -359,11 +364,45 @@ async def test_update_category_rule_applies_changes() -> None:
     assert session.committed is True
 
 
+async def test_update_category_rule_is_scoped_to_workspace() -> None:
+    workspace_id = uuid4()
+    rule = _rule(workspace_id)
+    session = _FakeAsyncSession(rule)
+
+    await update_category_rule(
+        workspace_id,
+        rule.id,
+        CategoryRuleUpdate(name="Renamed"),
+        session,  # type: ignore[arg-type]
+    )
+
+    # The lookup must constrain by workspace so it cannot match another
+    # tenant's rule with the same id.
+    select_sql = str(session.statements[0])
+    assert "category_rules.workspace_id" in select_sql
+
+
+async def test_update_category_rule_other_workspace_returns_404() -> None:
+    # A rule that belongs to a different workspace is filtered out by the
+    # workspace-scoped query, so it reads as missing.
+    session = _FakeAsyncSession(None)
+
+    with pytest.raises(HTTPException) as exc:
+        await update_category_rule(
+            uuid4(),
+            uuid4(),
+            CategoryRuleUpdate(name="Renamed"),
+            session,  # type: ignore[arg-type]
+        )
+    assert exc.value.status_code == 404
+
+
 async def test_update_category_rule_missing_returns_404() -> None:
     session = _FakeAsyncSession(None)
 
     with pytest.raises(HTTPException) as exc:
         await update_category_rule(
+            uuid4(),
             uuid4(),
             CategoryRuleUpdate(name="Renamed"),
             session,  # type: ignore[arg-type]
@@ -372,11 +411,13 @@ async def test_update_category_rule_missing_returns_404() -> None:
 
 
 async def test_update_category_rule_rejects_invalid_definition() -> None:
-    rule = _rule(operator="contains", pattern="coffee")
+    workspace_id = uuid4()
+    rule = _rule(workspace_id, operator="contains", pattern="coffee")
     session = _FakeAsyncSession(rule)
 
     with pytest.raises(HTTPException) as exc:
         await update_category_rule(
+            workspace_id,
             rule.id,
             CategoryRuleUpdate(operator="amount_between", pattern=None),
             session,  # type: ignore[arg-type]
@@ -403,6 +444,82 @@ async def test_apply_category_rules_categorizes_uncategorized_transactions() -> 
     assert unmatched.category_id is None
     assert any(isinstance(obj, CategoryRuleMatch) for obj in session.added)
     assert session.committed is True
+
+
+async def test_apply_category_rules_only_targets_active_posted_transactions() -> None:
+    workspace_id = uuid4()
+    session = _FakeAsyncSession(workspace_id, [], [])
+
+    await apply_category_rules(workspace_id, session)  # type: ignore[arg-type]
+
+    # Locate the transaction query among the executed statements.
+    tx_statement = next(
+        s for s in session.statements if "transactions.status" in str(s)
+    )
+    assert "posted" in tx_statement.compile().params.values()
+
+
+async def test_apply_category_rules_is_idempotent_on_existing_match() -> None:
+    workspace_id = uuid4()
+    category_id = uuid4()
+    rule = _rule(workspace_id, operator="contains", pattern="coffee",
+                 category_id=category_id)
+    matched = _transaction(workspace_id, description="Morning Coffee")
+    # The transaction was matched by this rule before, then uncategorized;
+    # re-applying must not insert a second (rule, transaction) audit row that
+    # would violate uq_category_rule_matches_rule_transaction.
+    existing = [(rule.id, matched.id)]
+    session = _FakeAsyncSession(workspace_id, [rule], [matched], existing)
+
+    result = await apply_category_rules(workspace_id, session)  # type: ignore[arg-type]
+
+    assert result.categorized_count == 1
+    assert result.transaction_ids == [matched.id]
+    assert matched.category_id == category_id
+    assert matched.categorized_by == "rule"
+    # No new match row is added because one already exists.
+    assert not any(isinstance(obj, CategoryRuleMatch) for obj in session.added)
+    assert session.committed is True
+
+
+# --- regex ReDoS hardening --------------------------------------------------
+
+
+def test_validate_rule_definition_rejects_nested_quantifier_regex() -> None:
+    for pattern in ("(a+)+", "(a*)*$", "(?:ab+)+", "([0-9]+)*"):
+        with pytest.raises(ValueError, match="catastrophic"):
+            validate_rule_definition("regex", pattern, None, None)
+
+
+def test_validate_rule_definition_rejects_overlong_regex() -> None:
+    with pytest.raises(ValueError, match="at most"):
+        validate_rule_definition(
+            "regex", "a" * (MAX_REGEX_PATTERN_LENGTH + 1), None, None
+        )
+
+
+def test_validate_rule_definition_accepts_safe_quantified_group() -> None:
+    # A quantified group whose body has no quantifier is not a ReDoS shape.
+    validate_rule_definition("regex", r"(abc)+\s*def", None, None)
+
+
+def test_category_rule_create_rejects_redos_regex() -> None:
+    with pytest.raises(ValidationError):
+        CategoryRuleCreate(
+            name="r", category_id=uuid4(), operator="regex", pattern="(a+)+$"
+        )
+
+
+def test_rule_matches_regex_truncates_long_input() -> None:
+    rule = _rule(operator="regex", pattern="zzz$")
+    within_limit = _transaction(description="zzz")
+    beyond_limit = _transaction(
+        description="a" * MAX_REGEX_INPUT_LENGTH + "zzz"
+    )
+
+    assert rule_matches(rule, within_limit) is True
+    # The trailing "zzz" is dropped by truncation, so the anchored match fails.
+    assert rule_matches(rule, beyond_limit) is False
 
 
 def test_category_helper_is_available() -> None:

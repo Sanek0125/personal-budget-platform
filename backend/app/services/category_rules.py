@@ -25,6 +25,62 @@ OPERATOR_PRIORITY: dict[str, int] = {
     "amount_between": 4,
 }
 
+# ReDoS mitigation. User-supplied regex patterns are bounded in length, and
+# the value they are matched against is truncated, so catastrophic
+# backtracking cannot run on unbounded input. ``validate_rule_definition``
+# additionally rejects the common nested-quantifier ReDoS shape (``(a+)+``).
+MAX_REGEX_PATTERN_LENGTH = 200
+MAX_REGEX_INPUT_LENGTH = 1024
+_QUANTIFIER_CHARS: frozenset[str] = frozenset("*+{")
+
+
+def _is_unescaped(pattern: str, index: int) -> bool:
+    """Return ``True`` when the character at ``index`` is not backslash-escaped."""
+    backslashes = 0
+    cursor = index - 1
+    while cursor >= 0 and pattern[cursor] == "\\":
+        backslashes += 1
+        cursor -= 1
+    return backslashes % 2 == 0
+
+
+def _body_has_quantifier(body: str) -> bool:
+    """Return ``True`` if ``body`` has a quantifier outside a character class."""
+    in_class = False
+    for i, char in enumerate(body):
+        if not _is_unescaped(body, i):
+            continue
+        if char == "[":
+            in_class = True
+        elif char == "]":
+            in_class = False
+        elif not in_class and char in _QUANTIFIER_CHARS:
+            return True
+    return False
+
+
+def _has_nested_quantifier(pattern: str) -> bool:
+    """Heuristically flag catastrophic-backtracking patterns like ``(a+)+``.
+
+    Detects a quantifier applied to a group whose body already contains a
+    quantifier. This is the most common ReDoS shape; the check is deliberately
+    conservative and may reject some safe-but-unusual patterns.
+    """
+    open_groups: list[int] = []
+    for i, char in enumerate(pattern):
+        if not _is_unescaped(pattern, i):
+            continue
+        if char == "(":
+            open_groups.append(i)
+        elif char == ")" and open_groups:
+            start = open_groups.pop()
+            after = pattern[i + 1 : i + 2]
+            if after in _QUANTIFIER_CHARS and _body_has_quantifier(
+                pattern[start + 1 : i]
+            ):
+                return True
+    return False
+
 
 def validate_rule_definition(
     operator: str,
@@ -52,6 +108,16 @@ def validate_rule_definition(
     if pattern is None or not pattern.strip():
         raise ValueError(f"{operator} rules require a non-empty pattern")
     if operator == "regex":
+        if len(pattern) > MAX_REGEX_PATTERN_LENGTH:
+            raise ValueError(
+                "regex pattern must be at most "
+                f"{MAX_REGEX_PATTERN_LENGTH} characters"
+            )
+        if _has_nested_quantifier(pattern):
+            raise ValueError(
+                "regex pattern has nested quantifiers that risk catastrophic "
+                "backtracking; simplify the pattern"
+            )
         try:
             re.compile(pattern)
         except re.error as exc:
@@ -73,7 +139,14 @@ def _text_matches(operator: str, pattern: str, value: str) -> bool:
         return haystack.startswith(needle)
     if operator == "regex":
         try:
-            return re.search(pattern, value, re.IGNORECASE) is not None
+            # Truncate the haystack so a pattern that slips past validation
+            # cannot backtrack over unbounded input.
+            return (
+                re.search(
+                    pattern, value[:MAX_REGEX_INPUT_LENGTH], re.IGNORECASE
+                )
+                is not None
+            )
         except re.error:
             return False
     return False
