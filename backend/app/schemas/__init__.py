@@ -14,6 +14,15 @@ from app.schemas.category_rule import (
     CategoryRuleRead,
     CategoryRuleUpdate,
 )
+from app.schemas.debt import (
+    ContactRead,
+    DebtCreate,
+    DebtPaymentCreate,
+    DebtPaymentRead,
+    DebtRead,
+    DebtSummaryRead,
+    DebtSummaryTotal,
+)
 from app.schemas.transaction import (
     TransactionCreate,
     TransactionRead,
@@ -39,6 +48,13 @@ __all__ = [
     "CategoryRuleCreate",
     "CategoryRuleRead",
     "CategoryRuleUpdate",
+    "ContactRead",
+    "DebtCreate",
+    "DebtPaymentCreate",
+    "DebtPaymentRead",
+    "DebtRead",
+    "DebtSummaryRead",
+    "DebtSummaryTotal",
     "TransactionCreate",
     "TransactionRead",
     "TransactionSplitCreate",
