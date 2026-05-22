@@ -129,6 +129,12 @@ class Transaction(Base):
     source: Mapped[str] = mapped_column(
         Text, nullable=False, default="manual", server_default="manual"
     )
+    import_batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("import_batches.id", ondelete="SET NULL")
+    )
+    import_row_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("import_rows.id", ondelete="SET NULL")
+    )
     external_id: Mapped[str | None] = mapped_column(Text)
     fingerprint: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
