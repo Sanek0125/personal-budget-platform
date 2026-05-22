@@ -33,10 +33,16 @@ async def list_workspaces(
 @router.get("/{workspace_id}", response_model=WorkspaceRead)
 async def get_workspace(
     workspace_id: UUID,
+    user_id: UUID,
     session: SessionDep,
 ) -> Workspace:
     result = await session.execute(
-        select(Workspace).where(Workspace.id == workspace_id)
+        select(Workspace)
+        .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)
+        .where(
+            Workspace.id == workspace_id,
+            WorkspaceMember.user_id == user_id,
+        )
     )
     workspace = result.scalar_one_or_none()
     if workspace is None:
@@ -93,10 +99,16 @@ async def create_workspace(
 @router.get("/{workspace_id}/members", response_model=list[WorkspaceMemberRead])
 async def list_workspace_members(
     workspace_id: UUID,
+    user_id: UUID,
     session: SessionDep,
 ) -> list[WorkspaceMember]:
     workspace = await session.execute(
-        select(Workspace.id).where(Workspace.id == workspace_id)
+        select(Workspace.id)
+        .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)
+        .where(
+            Workspace.id == workspace_id,
+            WorkspaceMember.user_id == user_id,
+        )
     )
     if workspace.scalar_one_or_none() is None:
         raise HTTPException(
