@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from app.api.accounts import router as accounts_router
+from app.api.budgets import router as budgets_router
 from app.api.categories import router as categories_router
 from app.api.category_rules import router as category_rules_router
 from app.api.imports import router as imports_router
@@ -14,6 +15,7 @@ app = FastAPI(
     debug=settings.debug,
 )
 app.include_router(accounts_router)
+app.include_router(budgets_router)
 app.include_router(categories_router)
 app.include_router(category_rules_router)
 app.include_router(imports_router)
