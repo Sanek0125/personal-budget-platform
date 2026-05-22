@@ -1,5 +1,11 @@
 from app.schemas.account import AccountCreate, AccountRead
 from app.schemas.category import CategoryCreate, CategoryRead
+from app.schemas.category_rule import (
+    CategoryRuleApplyResult,
+    CategoryRuleCreate,
+    CategoryRuleRead,
+    CategoryRuleUpdate,
+)
 from app.schemas.transaction import (
     TransactionCreate,
     TransactionRead,
@@ -15,6 +21,10 @@ __all__ = [
     "AccountRead",
     "CategoryCreate",
     "CategoryRead",
+    "CategoryRuleApplyResult",
+    "CategoryRuleCreate",
+    "CategoryRuleRead",
+    "CategoryRuleUpdate",
     "TransactionCreate",
     "TransactionRead",
     "TransactionSplitCreate",
