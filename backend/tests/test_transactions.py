@@ -124,6 +124,7 @@ def _transaction(workspace_id, account_id=None, amount=Decimal("-10")) -> Transa
         amount=amount,
         currency_code="USD",
         description="Coffee",
+        source="manual",
         fingerprint="fp",
     )
 
@@ -996,3 +997,257 @@ async def test_update_transaction_rejects_direct_transfer_edit() -> None:
         assert exc.detail == "Transfer transactions cannot be updated directly"
     else:
         raise AssertionError("direct transfer transaction edits should be rejected")
+
+
+async def test_create_transaction_fingerprint_keeps_legacy_semantics() -> None:
+    workspace_id = uuid4()
+    account_id = uuid4()
+
+    clean_session = _FakeAsyncSession(
+        workspace_id, _account(workspace_id, account_id=account_id)
+    )
+    clean = await create_transaction(
+        workspace_id,
+        TransactionCreate(
+            account_id=account_id,
+            type="expense",
+            occurred_at=datetime(2026, 5, 21, tzinfo=UTC),
+            amount=Decimal("-12.00"),
+            currency_code="USD",
+            description="Coffee Shop",
+        ),
+        clean_session,  # type: ignore[arg-type]
+    )
+
+    same_amount_scale_session = _FakeAsyncSession(
+        workspace_id, _account(workspace_id, account_id=account_id)
+    )
+    same_amount_scale = await create_transaction(
+        workspace_id,
+        TransactionCreate(
+            account_id=account_id,
+            type="expense",
+            occurred_at=datetime(2026, 5, 21, tzinfo=UTC),
+            amount=Decimal("-12.000000"),
+            currency_code="USD",
+            description="Coffee Shop",
+        ),
+        same_amount_scale_session,  # type: ignore[arg-type]
+    )
+
+    changed_description_session = _FakeAsyncSession(
+        workspace_id, _account(workspace_id, account_id=account_id)
+    )
+    changed_description = await create_transaction(
+        workspace_id,
+        TransactionCreate(
+            account_id=account_id,
+            type="expense",
+            occurred_at=datetime(2026, 5, 21, tzinfo=UTC),
+            amount=Decimal("-12.00"),
+            currency_code="USD",
+            description="  coffee   SHOP ",
+        ),
+        changed_description_session,  # type: ignore[arg-type]
+    )
+
+    assert clean.fingerprint == same_amount_scale.fingerprint
+    assert clean.fingerprint != changed_description.fingerprint
+
+
+def _fingerprint_integrity_error() -> IntegrityError:
+    """Build an IntegrityError whose orig names the fingerprint unique index."""
+    return IntegrityError(
+        "INSERT INTO transactions ...",
+        "params",
+        Exception(
+            "duplicate key value violates unique constraint "
+            '"uq_transactions_active_fingerprint"'
+        ),
+    )
+
+
+async def test_create_transaction_names_fingerprint_index_in_conflict() -> None:
+    workspace_id = uuid4()
+    account = _account(workspace_id)
+    session = _FakeAsyncSession(
+        workspace_id,
+        account,
+        commit_exception=_fingerprint_integrity_error(),
+    )
+
+    try:
+        await create_transaction(
+            workspace_id,
+            TransactionCreate(
+                account_id=account.id,
+                type="expense",
+                occurred_at=datetime(2026, 5, 21, tzinfo=UTC),
+                amount=Decimal("-1"),
+                currency_code="USD",
+                description="Coffee",
+            ),
+            session,  # type: ignore[arg-type]
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 409
+        assert "fingerprint" in exc.detail
+        assert session.rolled_back is True
+    else:
+        raise AssertionError("fingerprint index hit should produce a clear 409")
+
+
+async def test_create_transaction_flush_names_fingerprint_index_in_conflict() -> None:
+    workspace_id = uuid4()
+    account = _account(workspace_id)
+    session = _FakeAsyncSession(
+        workspace_id,
+        account,
+        flush_exception=_fingerprint_integrity_error(),
+    )
+
+    try:
+        await create_transaction(
+            workspace_id,
+            TransactionCreate(
+                account_id=account.id,
+                type="expense",
+                occurred_at=datetime(2026, 5, 21, tzinfo=UTC),
+                amount=Decimal("-1"),
+                currency_code="USD",
+                description="Coffee",
+            ),
+            session,  # type: ignore[arg-type]
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 409
+        assert "fingerprint" in exc.detail
+        assert session.rolled_back is True
+    else:
+        raise AssertionError("fingerprint index hit on flush should produce a 409")
+
+
+async def test_update_transaction_names_fingerprint_index_in_conflict() -> None:
+    workspace_id = uuid4()
+    existing = _transaction(workspace_id)
+    session = _FakeAsyncSession(
+        existing,
+        commit_exception=_fingerprint_integrity_error(),
+    )
+
+    try:
+        await update_transaction(
+            workspace_id,
+            existing.id,
+            TransactionUpdate(description="Updated"),
+            session,  # type: ignore[arg-type]
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 409
+        assert "fingerprint" in exc.detail
+        assert session.rolled_back is True
+    else:
+        raise AssertionError("fingerprint index hit on update should produce a 409")
+
+
+async def test_create_transfer_names_fingerprint_index_in_conflict() -> None:
+    workspace_id = uuid4()
+    from_account = _account(workspace_id)
+    to_account = _account(workspace_id)
+    session = _FakeAsyncSession(
+        workspace_id,
+        from_account,
+        to_account,
+        commit_exception=_fingerprint_integrity_error(),
+    )
+
+    try:
+        await create_transfer(
+            workspace_id,
+            TransferCreate(
+                from_account_id=from_account.id,
+                to_account_id=to_account.id,
+                occurred_at=datetime(2026, 5, 21, tzinfo=UTC),
+                from_amount=Decimal("100"),
+                from_currency_code="USD",
+                description="Duplicate transfer",
+            ),
+            session,  # type: ignore[arg-type]
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 409
+        assert "fingerprint" in exc.detail
+        assert session.rolled_back is True
+    else:
+        raise AssertionError("fingerprint index hit on transfer should produce a 409")
+
+
+async def test_integrity_error_without_fingerprint_index_stays_generic() -> None:
+    workspace_id = uuid4()
+    account = _account(workspace_id)
+    session = _FakeAsyncSession(
+        workspace_id,
+        account,
+        commit_exception=IntegrityError(
+            "statement", "params", Exception("some other constraint")
+        ),
+    )
+
+    try:
+        await create_transaction(
+            workspace_id,
+            TransactionCreate(
+                account_id=account.id,
+                type="expense",
+                occurred_at=datetime(2026, 5, 21, tzinfo=UTC),
+                amount=Decimal("-1"),
+                currency_code="USD",
+                description="Coffee",
+            ),
+            session,  # type: ignore[arg-type]
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 409
+        assert "fingerprint" not in exc.detail
+        assert session.rolled_back is True
+    else:
+        raise AssertionError("non-fingerprint integrity errors stay a generic 409")
+
+
+async def test_distinct_descriptions_produce_distinct_fingerprints() -> None:
+    workspace_id = uuid4()
+    account_id = uuid4()
+
+    first_session = _FakeAsyncSession(
+        workspace_id, _account(workspace_id, account_id=account_id)
+    )
+    first = await create_transaction(
+        workspace_id,
+        TransactionCreate(
+            account_id=account_id,
+            type="expense",
+            occurred_at=datetime(2026, 5, 21, tzinfo=UTC),
+            amount=Decimal("-12.00"),
+            currency_code="USD",
+            description="Coffee",
+        ),
+        first_session,  # type: ignore[arg-type]
+    )
+
+    second_session = _FakeAsyncSession(
+        workspace_id, _account(workspace_id, account_id=account_id)
+    )
+    second = await create_transaction(
+        workspace_id,
+        TransactionCreate(
+            account_id=account_id,
+            type="expense",
+            occurred_at=datetime(2026, 5, 21, tzinfo=UTC),
+            amount=Decimal("-12.00"),
+            currency_code="USD",
+            description="Tea",
+        ),
+        second_session,  # type: ignore[arg-type]
+    )
+
+    assert first.fingerprint != second.fingerprint

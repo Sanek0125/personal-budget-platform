@@ -1,6 +1,5 @@
 from datetime import UTC, datetime
 from decimal import Decimal
-from hashlib import sha256
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -24,6 +23,7 @@ from app.schemas.transaction import (
     TransferCreate,
     TransferRead,
 )
+from app.services.transaction_fingerprints import build_transaction_fingerprint
 
 router = APIRouter(
     prefix="/workspaces/{workspace_id}/transactions", tags=["transactions"]
@@ -35,34 +35,27 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def _decimal_text(value: Decimal) -> str:
-    return str(value.normalize())
+# Partial unique index guarding against duplicate active transactions; defined
+# in app/models/transaction.py.
+_FINGERPRINT_INDEX = "uq_transactions_active_fingerprint"
 
 
-def _generate_transaction_fingerprint(
-    *,
-    workspace_id: UUID,
-    account_id: UUID,
-    type: str,
-    occurred_at: datetime,
-    amount: Decimal,
-    currency_code: str,
-    description: str,
-    external_id: str | None,
-) -> str:
-    raw = "|".join(
-        [
-            str(workspace_id),
-            str(account_id),
-            type,
-            occurred_at.isoformat(),
-            _decimal_text(amount),
-            currency_code,
-            description,
-            external_id or "",
-        ]
-    )
-    return sha256(raw.encode("utf-8")).hexdigest()
+def _integrity_conflict(exc: IntegrityError) -> HTTPException:
+    """Map an IntegrityError to a 409, naming duplicate-fingerprint clashes.
+
+    Hitting the partial unique index ``uq_transactions_active_fingerprint``
+    means the transaction duplicates an existing active one for the account;
+    surface that explicitly so callers can tell it apart from other conflicts.
+    Any other integrity violation gets a generic 409.
+    """
+    if _FINGERPRINT_INDEX in str(exc.orig):
+        detail = (
+            "A transaction with the same fingerprint already exists "
+            "for this account"
+        )
+    else:
+        detail = "Transaction conflicts with an existing record"
+    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
 
 
 async def _ensure_workspace_exists(session: AsyncSession, workspace_id: UUID) -> None:
@@ -137,7 +130,7 @@ def _validate_splits(
 
 
 def _set_fingerprint(transaction: Transaction) -> None:
-    transaction.fingerprint = _generate_transaction_fingerprint(
+    transaction.fingerprint = build_transaction_fingerprint(
         workspace_id=transaction.workspace_id,
         account_id=transaction.account_id,
         type=transaction.type,
@@ -269,10 +262,7 @@ async def create_transaction(
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Transaction fingerprint already exists for this account",
-        ) from exc
+        raise _integrity_conflict(exc) from exc
     await session.refresh(transaction)
     transaction.splits = rows
     return transaction
@@ -374,10 +364,7 @@ async def update_transaction(
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Transaction fingerprint already exists for this account",
-        ) from exc
+        raise _integrity_conflict(exc) from exc
     await session.refresh(transaction)
     if replacement_splits is not None:
         transaction.splits = rows
@@ -516,9 +503,7 @@ async def create_transfer(
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
-        raise HTTPException(
-            status_code=409, detail="Transfer transaction already exists"
-        ) from exc
+        raise _integrity_conflict(exc) from exc
     await session.refresh(outflow)
     await session.refresh(inflow)
     outflow.splits = []
