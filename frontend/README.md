@@ -31,19 +31,28 @@ The frontend will be available at the URL printed by Vite, usually:
 http://localhost:5173
 ```
 
-## Backend API URL
+## Backend API URL and development auth
 
-By default, the API client uses root-relative URLs. To point the frontend at the local backend, set `VITE_API_BASE_URL` when starting Vite:
+By default, the API client uses root-relative URLs and sends the temporary development auth header required by the backend:
+
+```text
+X-User-Id: 00000000-0000-0000-0000-000000000001
+```
+
+To point the frontend at the local backend and use a seeded/local user, set `VITE_API_BASE_URL` and `VITE_DEV_USER_ID` when starting Vite:
 
 ```bash
 cd frontend
-VITE_API_BASE_URL=http://localhost:8000 npm run dev
+VITE_API_BASE_URL=http://localhost:8000 \
+VITE_DEV_USER_ID=<user-uuid> \
+npm run dev
 ```
 
 If you add a `.env.local` later, use:
 
 ```text
 VITE_API_BASE_URL=http://localhost:8000
+VITE_DEV_USER_ID=<user-uuid>
 ```
 
 ## Available scripts
@@ -83,7 +92,9 @@ Terminal 2 — frontend:
 
 ```bash
 cd /path/to/personal-budget-platform/frontend
-VITE_API_BASE_URL=http://localhost:8000 npm run dev
+VITE_API_BASE_URL=http://localhost:8000 \
+VITE_DEV_USER_ID=<user-uuid> \
+npm run dev
 ```
 
 Then open http://localhost:5173.

@@ -1,6 +1,7 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
 
+import { apiGet } from "./api/client";
 import "./styles.css";
 
 type NavigationItem = {
@@ -20,7 +21,52 @@ const navigationItems: NavigationItem[] = [
   { label: "Settings", path: "/settings" },
 ];
 
+type Workspace = {
+  id: string;
+  name: string;
+  kind: "personal" | "family" | "trip" | "other";
+  base_currency_code: string;
+  owner_user_id: string;
+};
+
 const queryClient = new QueryClient();
+
+function WorkspaceCard() {
+  const workspacesQuery = useQuery({
+    queryKey: ["workspaces"],
+    queryFn: () => apiGet<Workspace[]>("/workspaces"),
+  });
+  const activeWorkspace = workspacesQuery.data?.[0];
+
+  return (
+    <div className="workspace-card">
+      <span className="workspace-label">Workspace</span>
+      {workspacesQuery.isLoading ? (
+        <>
+          <strong>Loading workspaces…</strong>
+          <p>Using temporary development authentication.</p>
+        </>
+      ) : activeWorkspace ? (
+        <>
+          <strong>{activeWorkspace.name}</strong>
+          <p>
+            {activeWorkspace.kind} · {activeWorkspace.base_currency_code}
+          </p>
+        </>
+      ) : workspacesQuery.isError ? (
+        <>
+          <strong>Unable to load workspaces</strong>
+          <p>Check the backend and development user configuration.</p>
+        </>
+      ) : (
+        <>
+          <strong>Select a workspace</strong>
+          <p>Personal and family budgets will appear here.</p>
+        </>
+      )}
+    </div>
+  );
+}
 
 function Shell() {
   return (
@@ -34,11 +80,7 @@ function Shell() {
           </div>
         </div>
 
-        <div className="workspace-card">
-          <span className="workspace-label">Workspace</span>
-          <strong>Select a workspace</strong>
-          <p>Personal and family budgets will appear here.</p>
-        </div>
+        <WorkspaceCard />
 
         <nav className="nav-list">
           {navigationItems.map((item) => (
