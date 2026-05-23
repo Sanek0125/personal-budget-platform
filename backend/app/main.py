@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.accounts import router as accounts_router
+from app.api.auth import router as auth_router
 from app.api.budgets import router as budgets_router
 from app.api.categories import router as categories_router
 from app.api.category_rules import router as category_rules_router
@@ -26,6 +27,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(auth_router)
 app.include_router(accounts_router)
 app.include_router(budgets_router)
 app.include_router(categories_router)

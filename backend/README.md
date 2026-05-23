@@ -74,9 +74,29 @@ SELECT * FROM transactions LIMIT 10;
 \q
 ```
 
-## Development users and workspace members
+## Authentication and workspace members
 
-Until production auth is chosen, the backend uses temporary development auth with the `X-User-Id` header. Create users and add them to a workspace through HTTP instead of direct SQL:
+The backend now supports bearer-token authentication for normal browser/API use:
+
+```bash
+# Register a user and receive an access token.
+curl -s -X POST http://localhost:8000/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"vasily@example.com","password":"change-me-please","display_name":"Василий"}'
+
+# Log in an existing password user.
+curl -s -X POST http://localhost:8000/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"vasily@example.com","password":"change-me-please"}'
+
+# Fetch the current user. Use the access_token returned by register/login.
+curl -s http://localhost:8000/auth/me \
+  -H 'Authorization: Bearer YOUR_ACCESS_TOKEN'
+```
+
+Workspace-scoped routes derive the requester from the `Authorization` bearer token and return `401` when no credentials are provided. The previous `X-User-Id` header remains available only as an explicit local/dev fallback while the frontend auth gate is being built.
+
+Create users and add them to a workspace through HTTP instead of direct SQL:
 
 ```bash
 # Create a user
@@ -85,14 +105,14 @@ curl -s -X POST http://localhost:8000/users \
   -d '{"email":"vasily@example.com","display_name":"Василий"}'
 
 # Add an existing user to a workspace as admin/member/viewer.
-# The X-User-Id value must belong to a current workspace owner or admin.
+# The bearer token must belong to a current workspace owner or admin.
 curl -s -X POST http://localhost:8000/workspaces/<workspace-id>/members \
   -H 'Content-Type: application/json' \
-  -H 'X-User-Id: <owner-or-admin-user-id>' \
+  -H 'Authorization: Bearer OWNER_OR_ADMIN_ACCESS_TOKEN' \
   -d '{"user_id":"<new-user-id>","role":"member"}'
 ```
 
-Use the created user's UUID in the frontend with `VITE_DEV_USER_ID`.
+For local development scripts that have not moved to `/auth/login` yet, use the created user's UUID in the frontend with `VITE_DEV_USER_ID`.
 
 ## Checks
 
