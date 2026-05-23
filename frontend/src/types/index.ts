@@ -151,6 +151,44 @@ export type BudgetCreatePayload = {
   is_active: boolean;
 };
 
+export type BudgetLimit = {
+  id: string;
+  budget_id: string;
+  category_id: string;
+  amount: string;
+  currency_code: string;
+  rollover: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type BudgetLimitCreatePayload = {
+  category_id: string;
+  amount: string;
+  currency_code: string;
+  rollover: boolean;
+};
+
+export type BudgetLimitProgress = {
+  category_id: string;
+  limit_amount: string;
+  spent_amount: string;
+  remaining_amount: string;
+  percent_used: string;
+  currency_code: string;
+};
+
+export type BudgetProgress = {
+  budget_id: string;
+  period_start: string;
+  period_end: string;
+  currency_code: string;
+  total_limit: string;
+  total_spent: string;
+  total_remaining: string;
+  limits: BudgetLimitProgress[];
+};
+
 export type ImportBatch = {
   id: string;
   workspace_id: string;
