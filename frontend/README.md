@@ -39,7 +39,16 @@ By default, the API client uses root-relative URLs and sends the temporary devel
 X-User-Id: 00000000-0000-0000-0000-000000000001
 ```
 
-To point the frontend at the local backend and use a seeded/local user, set `VITE_API_BASE_URL` and `VITE_DEV_USER_ID` when starting Vite:
+For local browser development, prefer Vite's `/api` proxy so requests stay same-origin and avoid CORS preflight issues. The proxy forwards `/api/*` to `http://localhost:8000/*`:
+
+```bash
+cd frontend
+VITE_API_BASE_URL=/api \
+VITE_DEV_USER_ID=<user-uuid> \
+npm run dev
+```
+
+The backend also enables CORS for `http://localhost:5173` and `http://127.0.0.1:5173` by default, so direct API calls are supported when needed:
 
 ```bash
 cd frontend
@@ -48,10 +57,10 @@ VITE_DEV_USER_ID=<user-uuid> \
 npm run dev
 ```
 
-If you add a `.env.local` later, use:
+If you add a `.env.local` later, use the proxy by default:
 
 ```text
-VITE_API_BASE_URL=http://localhost:8000
+VITE_API_BASE_URL=/api
 VITE_DEV_USER_ID=<user-uuid>
 ```
 
@@ -123,7 +132,7 @@ Terminal 2 — frontend:
 
 ```bash
 cd /path/to/personal-budget-platform/frontend
-VITE_API_BASE_URL=http://localhost:8000 \
+VITE_API_BASE_URL=/api \
 VITE_DEV_USER_ID=<user-uuid> \
 npm run dev
 ```

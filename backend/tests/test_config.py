@@ -8,6 +8,7 @@ def test_settings_builds_async_postgres_url_from_environment(monkeypatch) -> Non
     monkeypatch.setenv("POSTGRES_USER", "budget")
     monkeypatch.setenv("POSTGRES_PASSWORD", "secret")
     monkeypatch.setenv("POSTGRES_DB", "budget_test")
+    monkeypatch.setenv("CORS_ORIGINS", "http://localhost:5173, http://127.0.0.1:5173")
 
     settings = Settings()
 
@@ -15,6 +16,7 @@ def test_settings_builds_async_postgres_url_from_environment(monkeypatch) -> Non
     assert settings.database_url == (
         "postgresql+asyncpg://budget:secret@db:5433/budget_test"
     )
+    assert settings.allowed_cors_origins == ["http://localhost:5173", "http://127.0.0.1:5173"]
 
 
 def test_settings_escapes_database_credentials(monkeypatch) -> None:
