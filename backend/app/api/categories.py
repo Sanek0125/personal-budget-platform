@@ -10,9 +10,23 @@ from app.db.session import get_db_session
 from app.models.category import Category
 from app.models.workspace import Workspace
 from app.schemas.category import CategoryCreate, CategoryRead
+from app.services.audit import (
+    audit_snapshot,
+    ensure_audit_entity_id,
+    record_audit_event,
+)
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/categories", tags=["categories"])
 SessionDep = Annotated[AsyncSession, Depends(get_db_session)]
+_CATEGORY_AUDIT_FIELDS = [
+    "parent_id",
+    "name",
+    "type",
+    "color",
+    "icon",
+    "is_system",
+    "sort_order",
+]
 
 
 @router.get("", response_model=list[CategoryRead])
@@ -74,6 +88,15 @@ async def create_category(
 
     category = Category(workspace_id=workspace_id, **payload.model_dump())
     session.add(category)
+    record_audit_event(
+        session,
+        workspace_id=workspace_id,
+        user_id=None,
+        entity_type="category",
+        entity_id=ensure_audit_entity_id(category),
+        action="create",
+        new_data=audit_snapshot(category, _CATEGORY_AUDIT_FIELDS),
+    )
     try:
         await session.commit()
     except IntegrityError as exc:

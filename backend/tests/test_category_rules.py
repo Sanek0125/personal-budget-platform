@@ -13,7 +13,7 @@ from app.api.category_rules import (
     update_category_rule,
 )
 from app.db.base import Base
-from app.models import Category, CategoryRule, CategoryRuleMatch, Transaction
+from app.models import AuditLog, Category, CategoryRule, CategoryRuleMatch, Transaction
 from app.schemas.category_rule import CategoryRuleCreate, CategoryRuleUpdate
 from app.services.category_rules import (
     MAX_REGEX_INPUT_LENGTH,
@@ -313,7 +313,8 @@ async def test_create_category_rule_persists_rule() -> None:
         session,  # type: ignore[arg-type]
     )
 
-    assert session.added == [rule]
+    assert rule in session.added
+    assert any(isinstance(obj, AuditLog) for obj in session.added)
     assert session.committed is True
     assert rule.workspace_id == workspace_id
     assert rule.category_id == category_id

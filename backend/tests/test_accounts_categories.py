@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from app.api.accounts import create_account
 from app.api.categories import create_category
 from app.db.base import Base
-from app.models import Account, Category
+from app.models import Account, AuditLog, Category
 from app.schemas.account import AccountCreate
 from app.schemas.category import CategoryCreate
 
@@ -218,7 +218,8 @@ async def test_create_category_creates_nested_category_with_valid_parent() -> No
     )
 
     assert len(session.statements) == 3
-    assert session.added == [category]
+    assert category in session.added
+    assert any(isinstance(obj, AuditLog) for obj in session.added)
     assert session.committed is True
     assert session.refreshed is category
     assert category.workspace_id == workspace_id

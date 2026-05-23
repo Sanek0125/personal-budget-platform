@@ -20,10 +20,30 @@ from app.schemas.budget import (
     BudgetProgressRead,
     BudgetRead,
 )
+from app.services.audit import (
+    audit_snapshot,
+    ensure_audit_entity_id,
+    record_audit_event,
+)
 from app.services.budgets import calculate_budget_progress
 
 router = APIRouter(tags=["budgets"])
 SessionDep = Annotated[AsyncSession, Depends(get_db_session)]
+_BUDGET_AUDIT_FIELDS = [
+    "name",
+    "period_type",
+    "period_start",
+    "period_end",
+    "currency_code",
+    "is_active",
+]
+_BUDGET_LIMIT_AUDIT_FIELDS = [
+    "budget_id",
+    "category_id",
+    "amount",
+    "currency_code",
+    "rollover",
+]
 
 
 async def _ensure_workspace_exists(session: AsyncSession, workspace_id: UUID) -> None:
@@ -112,6 +132,15 @@ async def create_budget(
     )
     try:
         session.add(budget)
+        record_audit_event(
+            session,
+            workspace_id=workspace_id,
+            user_id=None,
+            entity_type="budget",
+            entity_id=ensure_audit_entity_id(budget),
+            action="create",
+            new_data=audit_snapshot(budget, _BUDGET_AUDIT_FIELDS),
+        )
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
@@ -150,6 +179,15 @@ async def create_budget_limit(
     )
     try:
         session.add(limit)
+        record_audit_event(
+            session,
+            workspace_id=budget.workspace_id,
+            user_id=None,
+            entity_type="budget_limit",
+            entity_id=ensure_audit_entity_id(limit),
+            action="create",
+            new_data=audit_snapshot(limit, _BUDGET_LIMIT_AUDIT_FIELDS),
+        )
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
