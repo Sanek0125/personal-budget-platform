@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 
 WorkspaceKind = Literal["personal", "family", "trip", "other"]
 WorkspaceRole = Literal["owner", "admin", "member", "viewer"]
+WorkspaceAssignableRole = Literal["admin", "member", "viewer"]
 
 
 class WorkspaceCreate(BaseModel):
@@ -40,6 +41,11 @@ class WorkspaceRead(BaseModel):
     updated_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+
+class WorkspaceMemberCreate(BaseModel):
+    user_id: UUID
+    role: WorkspaceAssignableRole
 
 
 class WorkspaceMemberRead(BaseModel):

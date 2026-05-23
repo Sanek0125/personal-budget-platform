@@ -42,7 +42,13 @@ from app.schemas.transaction import (
     TransferCreate,
     TransferRead,
 )
-from app.schemas.workspace import WorkspaceCreate, WorkspaceMemberRead, WorkspaceRead
+from app.schemas.user import UserCreate, UserRead
+from app.schemas.workspace import (
+    WorkspaceCreate,
+    WorkspaceMemberCreate,
+    WorkspaceMemberRead,
+    WorkspaceRead,
+)
 
 __all__ = [
     "AccountCreate",
@@ -81,7 +87,10 @@ __all__ = [
     "TransactionUpdate",
     "TransferCreate",
     "TransferRead",
+    "UserCreate",
+    "UserRead",
     "WorkspaceCreate",
+    "WorkspaceMemberCreate",
     "WorkspaceMemberRead",
     "WorkspaceRead",
 ]
