@@ -908,21 +908,54 @@ Tasks:
 4. Log category and budget changes.
 5. Add tests that audit entries are created for financial mutations.
 
-### Phase 12: Auth and permissions
+### Phase 12: Auth, sessions, and permissions
+
+Purpose: replace the temporary `X-User-Id` development-auth flow before the app is treated as usable from a normal browser. Without this phase, the frontend cannot know which user's workspaces to load when a visitor opens the app without a preconfigured `VITE_DEV_USER_ID`.
 
 Tasks:
 
-1. Implement basic email/password auth or temporary dev auth, depending on product decision.
-2. Implement workspace membership checks.
-3. Add role-based permission helpers.
-4. Apply authorization dependencies to all workspace endpoints.
-5. Add tests for viewer/member/admin/owner permissions.
+1. Choose the first production auth mechanism. Default MVP recommendation: classic email/password with server-issued session/JWT; keep Telegram/OAuth as later login providers.
+2. Add password hashing and auth schemas for register/login/logout/current-user flows.
+3. Add backend endpoints:
+   - `POST /auth/register` — create a user and initial personal workspace or return enough state for onboarding;
+   - `POST /auth/login` — authenticate and establish a session/JWT;
+   - `POST /auth/logout` — clear/revoke the session when applicable;
+   - `GET /auth/me` — return the authenticated user profile.
+4. Replace temporary request identity for browser traffic:
+   - authenticated requests derive `current_user` from the session/JWT;
+   - keep `X-User-Id` only as an explicit local/dev fallback, not as the normal frontend path;
+   - unauthenticated workspace-scoped requests return `401` instead of falling back to a default user.
+5. Implement workspace membership checks and role-based permission helpers.
+6. Apply authorization dependencies to all workspace endpoints.
+7. Add tests for unauthenticated access, invalid credentials, `/auth/me`, viewer/member/admin/owner permissions, and workspace isolation.
 
 Open decision:
 
-- Exact auth mechanism: classic email/password, magic link, Telegram-first, or OAuth.
+- Exact long-term auth mechanism: email/password, magic links, Telegram login, OAuth, or a combination. For the next MVP step, use email/password unless product direction changes.
 
-### Phase 13: User management and workspace invitations
+### Phase 13: Frontend auth gate and onboarding
+
+Purpose: make the React app safe to open without preconfigured development auth, and ensure workspace loading happens only after the frontend knows the authenticated user.
+
+Tasks:
+
+1. Add an auth client/module for `/auth/register`, `/auth/login`, `/auth/logout`, and `/auth/me`.
+2. Add login/register pages and route unauthenticated users there before rendering the workspace shell.
+3. Change the shell startup flow:
+   - first load `/auth/me`;
+   - only then load `/workspaces` for the authenticated user;
+   - show a clear unauthenticated state instead of sending workspace requests with a hardcoded user id.
+4. Store auth state safely:
+   - prefer an HttpOnly cookie session if backend supports it;
+   - otherwise store a short-lived bearer token deliberately and centralize token injection in the API client.
+5. Preserve the existing workspace switcher after login:
+   - keep `personal-budget.active-workspace-id` as a UI preference;
+   - validate the stored workspace id against the authenticated user's workspace list;
+   - clear/fallback when the user changes or the workspace is no longer available.
+6. Add onboarding for users with no workspaces: create a first personal workspace before showing core budget pages.
+7. Add frontend tests for unauthenticated redirect, login success, `/auth/me` bootstrap, no-workspace onboarding, logout, and workspace-switcher persistence per authenticated user.
+
+### Phase 14: User management and workspace invitations
 
 Purpose: make development and family/shared workspaces usable without direct SQL while full production auth is still undecided.
 
@@ -1138,7 +1171,14 @@ Mitigation:
 
 ## 11. Suggested implementation order
 
-Recommended order:
+Recommended order from the current frontend Dashboard/workspace-switcher state:
+
+1. Backend production-auth foundation: register/login/logout/current-user, session/JWT validation, unauthenticated `401` behavior, and role-aware workspace authorization.
+2. Frontend auth gate: login/register routes, `/auth/me` bootstrap, no-workspace onboarding, and workspace loading only after the user is known.
+3. Keep the workspace switcher as a post-login workspace preference, validated against the authenticated user's workspace list.
+4. Then continue deeper finance workflows: transaction filters/splits/transfers, import mapping, budget limits/progress, debt repayments, reward rules, reporting, and Telegram quick-entry prototype.
+
+Original domain build order, kept for historical context:
 
 1. Backend skeleton + PostgreSQL + migrations.
 2. Users/workspaces/members.
