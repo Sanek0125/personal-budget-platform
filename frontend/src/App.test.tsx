@@ -65,7 +65,7 @@ describe("App shell", () => {
     await user.click(screen.getByRole("link", { name: /transactions/i }));
 
     expect(screen.getByRole("heading", { name: /transactions/i })).toBeInTheDocument();
-    expect(screen.getByText(/manual entries, splits, transfers, and imported operations/i)).toBeInTheDocument();
+    expect(screen.getByText(/manual expense, income, and adjustment entries/i)).toBeInTheDocument();
   });
 
   it("lists accounts for the active workspace", async () => {
@@ -329,6 +329,242 @@ describe("App shell", () => {
           color: "#0ea5e9",
           icon: "wallet",
           sort_order: 25,
+        }),
+      }),
+    );
+  });
+
+  it("lists transactions with account and category context for the active workspace", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "44444444-4444-4444-4444-444444444444",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              owner_user_id: null,
+              name: "Tinkoff Black",
+              type: "bank_card",
+              currency_code: "RUB",
+              institution_name: "T-Bank",
+              masked_number: "*1234",
+              opening_balance: "1500.00",
+              is_active: true,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "66666666-6666-6666-6666-666666666666",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              parent_id: null,
+              name: "Groceries",
+              type: "expense",
+              color: "#22c55e",
+              icon: "cart",
+              sort_order: 10,
+              is_system: false,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "88888888-8888-8888-8888-888888888888",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              account_id: "44444444-4444-4444-4444-444444444444",
+              user_id: null,
+              type: "expense",
+              status: "posted",
+              occurred_at: "2026-05-22T12:34:00Z",
+              booked_at: null,
+              amount: "-1250.50",
+              currency_code: "RUB",
+              original_amount: null,
+              original_currency_code: null,
+              base_amount: null,
+              base_currency_code: null,
+              exchange_rate_id: null,
+              exchange_rate: null,
+              description: "Grocery run",
+              merchant_name: "Perekrestok",
+              merchant_raw: null,
+              category_id: "66666666-6666-6666-6666-666666666666",
+              category_confidence: null,
+              categorized_by: null,
+              notes: null,
+              source: "manual",
+              external_id: null,
+              fingerprint: "fingerprint-1",
+              created_at: null,
+              updated_at: null,
+              deleted_at: null,
+              splits: [],
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("link", { name: /transactions/i }));
+
+    expect(await screen.findByRole("heading", { name: /transactions/i })).toBeInTheDocument();
+    expect(await screen.findByText("Grocery run")).toBeInTheDocument();
+    expect(screen.getByText(/expense · -1250.50 RUB/i)).toBeInTheDocument();
+    expect(screen.getByText(/Tinkoff Black · Groceries/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/transactions",
+      expect.objectContaining({
+        headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
+      }),
+    );
+  });
+
+  it("creates an expense transaction in the active workspace", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "44444444-4444-4444-4444-444444444444",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              owner_user_id: null,
+              name: "Tinkoff Black",
+              type: "bank_card",
+              currency_code: "RUB",
+              institution_name: "T-Bank",
+              masked_number: "*1234",
+              opening_balance: "1500.00",
+              is_active: true,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "66666666-6666-6666-6666-666666666666",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              parent_id: null,
+              name: "Groceries",
+              type: "expense",
+              color: "#22c55e",
+              icon: "cart",
+              sort_order: 10,
+              is_system: false,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "88888888-8888-8888-8888-888888888888",
+            workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            account_id: "44444444-4444-4444-4444-444444444444",
+            user_id: null,
+            type: "expense",
+            status: "posted",
+            occurred_at: "2026-05-22T12:34:00Z",
+            booked_at: null,
+            amount: "-1250.50",
+            currency_code: "RUB",
+            original_amount: null,
+            original_currency_code: null,
+            base_amount: null,
+            base_currency_code: null,
+            exchange_rate_id: null,
+            exchange_rate: null,
+            description: "Grocery run",
+            merchant_name: "Perekrestok",
+            merchant_raw: null,
+            category_id: "66666666-6666-6666-6666-666666666666",
+            category_confidence: null,
+            categorized_by: null,
+            notes: null,
+            source: "manual",
+            external_id: null,
+            fingerprint: "fingerprint-1",
+            created_at: null,
+            updated_at: null,
+            deleted_at: null,
+            splits: [],
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("link", { name: /transactions/i }));
+    await user.selectOptions(await screen.findByLabelText(/account/i), "44444444-4444-4444-4444-444444444444");
+    await user.selectOptions(screen.getByLabelText(/transaction type/i), "expense");
+    await user.type(screen.getByLabelText(/description/i), " Grocery run ");
+    await user.type(screen.getByLabelText(/^amount$/i), "1250.50");
+    await user.type(screen.getByLabelText(/occurred at/i), "2026-05-22T12:34");
+    await user.selectOptions(screen.getByLabelText(/category/i), "66666666-6666-6666-6666-666666666666");
+    await user.type(screen.getByLabelText(/merchant/i), " Perekrestok ");
+    await user.click(screen.getByRole("button", { name: /create transaction/i }));
+
+    expect(await screen.findByText(/created transaction Grocery run/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      5,
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/transactions",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          account_id: "44444444-4444-4444-4444-444444444444",
+          type: "expense",
+          occurred_at: "2026-05-22T12:34:00.000Z",
+          amount: "-1250.50",
+          currency_code: "RUB",
+          description: "Grocery run",
+          category_id: "66666666-6666-6666-6666-666666666666",
+          merchant_name: "Perekrestok",
         }),
       }),
     );

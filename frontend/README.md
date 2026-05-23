@@ -73,6 +73,13 @@ The Categories page connects the existing workspace-scoped categories API to:
 - create top-level `expense`, `income`, `transfer`, or `mixed` categories through `POST /workspaces/{workspace_id}/categories`;
 - include optional display metadata such as color, icon, and sort order.
 
+The Transactions page connects the manual-entry API to the existing workspace, accounts, and categories flows:
+
+- list transactions from `GET /workspaces/{workspace_id}/transactions`;
+- load account and category names for transaction context;
+- create manual `expense`, `income`, or `adjustment` transactions through `POST /workspaces/{workspace_id}/transactions`;
+- derive the transaction currency from the selected account and normalize expense amounts as negative values before sending.
+
 ## Available scripts
 
 ```bash
