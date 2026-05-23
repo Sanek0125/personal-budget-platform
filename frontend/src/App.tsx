@@ -139,6 +139,28 @@ type TransactionCreatePayload = {
   notes?: string;
 };
 
+type Budget = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  period_type: "monthly";
+  period_start: string;
+  period_end: string;
+  currency_code: string;
+  is_active: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+type BudgetCreatePayload = {
+  name: string;
+  period_type: "monthly";
+  period_start: string;
+  period_end: string;
+  currency_code: string;
+  is_active: boolean;
+};
+
 type WorkspaceQuery = ReturnType<typeof useWorkspaces>;
 type AssignableRole = "admin" | "member" | "viewer";
 
@@ -215,7 +237,7 @@ function Shell() {
           <Route path="accounts" element={<AccountsPage activeWorkspace={activeWorkspace} />} />
           <Route path="categories" element={<CategoriesPage activeWorkspace={activeWorkspace} />} />
           <Route path="imports" element={<FeaturePage title="Imports" description="Upload CSV, XLSX, or PDF statements, preview rows, and confirm imports." />} />
-          <Route path="budgets" element={<FeaturePage title="Budgets" description="Monthly plans, category limits, progress bars, and over-budget warnings." />} />
+          <Route path="budgets" element={<BudgetsPage activeWorkspace={activeWorkspace} />} />
           <Route path="debts" element={<FeaturePage title="Debts" description="Contacts, debts in both directions, repayments, and balances." />} />
           <Route path="rewards" element={<FeaturePage title="Rewards" description="Cashback, points, miles, accrual rules, and reward balances." />} />
           <Route path="settings" element={<SettingsPage activeWorkspace={activeWorkspace} />} />
@@ -672,6 +694,131 @@ function CategoriesPage({ activeWorkspace }: { activeWorkspace?: Workspace }) {
                   <span>{[category.type, category.color, category.icon].filter(Boolean).join(" · ")}</span>
                   {category.parent_id ? <span>Parent: {category.parent_id}</span> : null}
                   <span>Sort order: {category.sort_order}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function BudgetsPage({ activeWorkspace }: { activeWorkspace?: Workspace }) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState("");
+  const [periodStart, setPeriodStart] = useState("");
+  const [periodEnd, setPeriodEnd] = useState("");
+  const [currencyCode, setCurrencyCode] = useState(activeWorkspace?.base_currency_code ?? "");
+  const [isActive, setIsActive] = useState(true);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  const budgetsQuery = useQuery({
+    queryKey: ["budgets", activeWorkspace?.id],
+    queryFn: () => apiGet<Budget[]>(`/workspaces/${activeWorkspace?.id}/budgets`),
+    enabled: Boolean(activeWorkspace),
+  });
+  const categoriesQuery = useQuery({
+    queryKey: ["categories", activeWorkspace?.id, "budgets-page"],
+    queryFn: () => apiGet<Category[]>(`/workspaces/${activeWorkspace?.id}/categories`),
+    enabled: Boolean(activeWorkspace),
+  });
+
+  async function handleCreateBudget(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!activeWorkspace) {
+      setStatusMessage("Select a workspace before creating budgets");
+      return;
+    }
+
+    setStatusMessage(null);
+    const payload: BudgetCreatePayload = {
+      name: name.trim(),
+      period_type: "monthly",
+      period_start: periodStart,
+      period_end: periodEnd,
+      currency_code: currencyCode.trim().toUpperCase(),
+      is_active: isActive,
+    };
+
+    try {
+      const budget = await apiPost<Budget, BudgetCreatePayload>(
+        `/workspaces/${activeWorkspace.id}/budgets`,
+        payload,
+      );
+      setStatusMessage(`Created budget ${budget.name}`);
+      setName("");
+      setPeriodStart("");
+      setPeriodEnd("");
+      setCurrencyCode(activeWorkspace.base_currency_code);
+      setIsActive(true);
+      await queryClient.invalidateQueries({ queryKey: ["budgets", activeWorkspace.id] });
+    } catch {
+      setStatusMessage("Unable to create budget");
+    }
+  }
+
+  return (
+    <section className="page-card budgets-page">
+      <p className="eyebrow">MVP module</p>
+      <h2>Budgets</h2>
+      <p>Monthly budget plans for the active workspace, with categories ready for limit planning.</p>
+
+      <div className="settings-grid">
+        <form className="settings-panel" onSubmit={handleCreateBudget}>
+          <h3>Create budget</h3>
+          <p>
+            Active workspace: <strong>{activeWorkspace?.name ?? "none"}</strong>
+          </p>
+          <label>
+            Budget name
+            <input value={name} onChange={(event) => setName(event.target.value)} minLength={1} required />
+          </label>
+          <label>
+            Period start
+            <input type="date" value={periodStart} onChange={(event) => setPeriodStart(event.target.value)} required />
+          </label>
+          <label>
+            Period end
+            <input type="date" value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} required />
+          </label>
+          <label>
+            Budget currency
+            <input
+              value={currencyCode}
+              onChange={(event) => setCurrencyCode(event.target.value)}
+              placeholder={activeWorkspace?.base_currency_code ?? "RUB"}
+              minLength={3}
+              maxLength={3}
+              required
+            />
+          </label>
+          <label className="checkbox-label">
+            <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} />
+            Active budget
+          </label>
+          <button type="submit" disabled={!activeWorkspace}>Create budget</button>
+          {statusMessage ? <p role="status">{statusMessage}</p> : null}
+        </form>
+
+        <div className="settings-panel">
+          <h3>Budget list</h3>
+          {!activeWorkspace ? <p>Select a workspace to load budgets.</p> : null}
+          {budgetsQuery.isLoading || categoriesQuery.isLoading ? <p>Loading budgets…</p> : null}
+          {budgetsQuery.isError ? <p role="alert">Unable to load budgets</p> : null}
+          {budgetsQuery.data?.length === 0 ? <p>No budgets yet.</p> : null}
+          {categoriesQuery.data?.length ? <p>Limit categories available: {categoriesQuery.data.length}</p> : null}
+          {budgetsQuery.data?.length ? (
+            <ul className="entity-list">
+              {budgetsQuery.data.map((budget) => (
+                <li key={budget.id}>
+                  <strong>{budget.name}</strong>
+                  <span>
+                    {budget.period_type} · {budget.period_start} → {budget.period_end}
+                  </span>
+                  <span>
+                    {budget.currency_code} · {budget.is_active ? "active" : "inactive"}
+                  </span>
                 </li>
               ))}
             </ul>

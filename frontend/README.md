@@ -80,6 +80,12 @@ The Transactions page connects the manual-entry API to the existing workspace, a
 - create manual `expense`, `income`, or `adjustment` transactions through `POST /workspaces/{workspace_id}/transactions`;
 - derive the transaction currency from the selected account and normalize expense amounts as negative values before sending.
 
+The Budgets page connects the monthly planning API to the active workspace:
+
+- list active budgets from `GET /workspaces/{workspace_id}/budgets`;
+- create monthly budgets through `POST /workspaces/{workspace_id}/budgets`;
+- normalize budget currency codes to uppercase and keep categories loaded for upcoming limit planning.
+
 ## Available scripts
 
 ```bash
