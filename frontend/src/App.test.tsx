@@ -615,16 +615,17 @@ describe("App shell", () => {
           ]),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
-      );
+      )
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }));
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(await screen.findByRole("link", { name: /categories/i }));
 
     expect(await screen.findByRole("heading", { name: /categories/i })).toBeInTheDocument();
-    expect(await screen.findByText("Groceries")).toBeInTheDocument();
+    expect((await screen.findAllByText("Groceries")).length).toBeGreaterThan(0);
     expect(screen.getByText(/expense · #22c55e · cart/i)).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenLastCalledWith(
+    expect(fetchMock).toHaveBeenCalledWith(
       "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/categories",
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: `Bearer ${TEST_TOKEN}` }),
@@ -650,6 +651,7 @@ describe("App shell", () => {
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
       )
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }))
       .mockResolvedValueOnce(new Response("[]", { status: 200 }))
       .mockResolvedValueOnce(
         new Response(
@@ -698,8 +700,7 @@ describe("App shell", () => {
     await user.click(screen.getByRole("button", { name: /create category/i }));
 
     expect(await screen.findByText(/created category Salary/i)).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      4,
+    expect(fetchMock).toHaveBeenCalledWith(
       "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/categories",
       expect.objectContaining({
         method: "POST",
@@ -711,6 +712,174 @@ describe("App shell", () => {
           sort_order: 25,
         }),
       }),
+    );
+  });
+
+  it("lists category rules, creates a rule, and applies active rules", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "66666666-6666-6666-6666-666666666666",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              parent_id: null,
+              name: "Groceries",
+              type: "expense",
+              color: "#22c55e",
+              icon: "cart",
+              sort_order: 10,
+              is_system: false,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "12121212-1212-1212-1212-121212121212",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              category_id: "66666666-6666-6666-6666-666666666666",
+              name: "Grocery merchants",
+              operator: "contains",
+              match_field: "merchant_name",
+              pattern: "perekrestok",
+              amount_min: null,
+              amount_max: null,
+              priority: 20,
+              is_active: true,
+              created_at: "2026-05-23T10:00:00Z",
+              updated_at: "2026-05-23T10:00:00Z",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "13131313-1313-1313-1313-131313131313",
+            workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            category_id: "66666666-6666-6666-6666-666666666666",
+            name: "Coffee shops",
+            operator: "starts_with",
+            match_field: "description",
+            pattern: "coffee",
+            amount_min: null,
+            amount_max: null,
+            priority: 30,
+            is_active: true,
+            created_at: "2026-05-23T10:05:00Z",
+            updated_at: "2026-05-23T10:05:00Z",
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "12121212-1212-1212-1212-121212121212",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              category_id: "66666666-6666-6666-6666-666666666666",
+              name: "Grocery merchants",
+              operator: "contains",
+              match_field: "merchant_name",
+              pattern: "perekrestok",
+              amount_min: null,
+              amount_max: null,
+              priority: 20,
+              is_active: true,
+              created_at: "2026-05-23T10:00:00Z",
+              updated_at: "2026-05-23T10:00:00Z",
+            },
+            {
+              id: "13131313-1313-1313-1313-131313131313",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              category_id: "66666666-6666-6666-6666-666666666666",
+              name: "Coffee shops",
+              operator: "starts_with",
+              match_field: "description",
+              pattern: "coffee",
+              amount_min: null,
+              amount_max: null,
+              priority: 30,
+              is_active: true,
+              created_at: "2026-05-23T10:05:00Z",
+              updated_at: "2026-05-23T10:05:00Z",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            evaluated_count: 5,
+            categorized_count: 2,
+            transaction_ids: ["88888888-8888-8888-8888-888888888888"],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: /categories/i }));
+
+    expect(await screen.findByText("Grocery merchants")).toBeInTheDocument();
+    expect(screen.getByText(/merchant_name · contains · perekrestok/i)).toBeInTheDocument();
+    await user.type(await screen.findByLabelText(/rule name/i), " Coffee shops ");
+    await user.selectOptions(screen.getByLabelText(/rule category/i), "66666666-6666-6666-6666-666666666666");
+    await user.selectOptions(screen.getByLabelText(/match field/i), "description");
+    await user.selectOptions(screen.getByLabelText(/operator/i), "starts_with");
+    await user.type(screen.getByLabelText(/pattern/i), " coffee ");
+    await user.clear(screen.getByLabelText(/priority/i));
+    await user.type(screen.getByLabelText(/priority/i), "30");
+    await user.click(screen.getByRole("button", { name: /create rule/i }));
+
+    expect(await screen.findByText(/created category rule Coffee shops/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/category-rules",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          name: "Coffee shops",
+          category_id: "66666666-6666-6666-6666-666666666666",
+          operator: "starts_with",
+          match_field: "description",
+          pattern: "coffee",
+          priority: 30,
+          is_active: true,
+        }),
+      }),
+    );
+    expect(await screen.findByText("Coffee shops")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /apply active rules/i }));
+
+    expect(await screen.findByText(/categorized 2 of 5 transactions/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/category-rules/apply",
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
