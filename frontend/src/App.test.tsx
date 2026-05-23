@@ -57,15 +57,152 @@ describe("App shell", () => {
     );
   });
 
-  it("routes to feature placeholders from sidebar links", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response("[]", { status: 200 }));
-    const user = userEvent.setup();
+  it("loads a dashboard overview for the active workspace", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "44444444-4444-4444-4444-444444444444",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              owner_user_id: null,
+              name: "Tinkoff Black",
+              type: "bank_card",
+              currency_code: "RUB",
+              institution_name: "T-Bank",
+              masked_number: "*1234",
+              opening_balance: "1500.00",
+              is_active: true,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "66666666-6666-6666-6666-666666666666",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              account_id: "44444444-4444-4444-4444-444444444444",
+              user_id: "11111111-1111-1111-1111-111111111111",
+              type: "expense",
+              status: "posted",
+              occurred_at: "2026-05-23T08:30:00Z",
+              booked_at: null,
+              amount: "-250.50",
+              currency_code: "RUB",
+              original_amount: null,
+              original_currency_code: null,
+              base_amount: null,
+              base_currency_code: null,
+              exchange_rate_id: null,
+              exchange_rate: null,
+              description: "Groceries",
+              merchant_name: "Market",
+              merchant_raw: null,
+              category_id: null,
+              category_confidence: null,
+              categorized_by: null,
+              notes: null,
+              source: "manual",
+              external_id: null,
+              fingerprint: "tx-1",
+              created_at: null,
+              updated_at: null,
+              deleted_at: null,
+              splits: [],
+            },
+            {
+              id: "77777777-7777-7777-7777-777777777777",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              account_id: "44444444-4444-4444-4444-444444444444",
+              user_id: "11111111-1111-1111-1111-111111111111",
+              type: "income",
+              status: "posted",
+              occurred_at: "2026-05-22T08:30:00Z",
+              booked_at: null,
+              amount: "1000.00",
+              currency_code: "RUB",
+              original_amount: null,
+              original_currency_code: null,
+              base_amount: null,
+              base_currency_code: null,
+              exchange_rate_id: null,
+              exchange_rate: null,
+              description: "Salary",
+              merchant_name: null,
+              merchant_raw: null,
+              category_id: null,
+              category_confidence: null,
+              categorized_by: null,
+              notes: null,
+              source: "manual",
+              external_id: null,
+              fingerprint: "tx-2",
+              created_at: null,
+              updated_at: null,
+              deleted_at: null,
+              splits: [],
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            totals: [
+              {
+                direction: "they_owe_me",
+                currency_code: "RUB",
+                principal_amount: "300.00",
+                paid_amount: "100.00",
+                remaining_amount: "200.00",
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
+
     render(<App />);
 
-    await user.click(screen.getByRole("link", { name: /transactions/i }));
-
-    expect(screen.getByRole("heading", { name: /transactions/i })).toBeInTheDocument();
-    expect(screen.getByText(/manual expense, income, and adjustment entries/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /dashboard/i })).toBeInTheDocument();
+    expect((await screen.findAllByText(/family budget/i)).length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: /accounts/i, level: 3 })).toBeInTheDocument();
+    expect(await screen.findByText("749.50 RUB")).toBeInTheDocument();
+    expect(screen.getByText("1 active")).toBeInTheDocument();
+    expect(screen.getByText(/net cashflow/i)).toBeInTheDocument();
+    expect(screen.getByText(/debt remaining/i)).toBeInTheDocument();
+    expect(screen.getByText("200.00 RUB")).toBeInTheDocument();
+    expect(screen.getByText(/recent transactions/i)).toBeInTheDocument();
+    expect(screen.getByText("Groceries")).toBeInTheDocument();
+    expect(screen.getByText("Salary")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/transactions",
+      expect.objectContaining({
+        headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
+      }),
+    );
   });
 
   it("lists accounts for the active workspace", async () => {

@@ -64,6 +64,12 @@ VITE_API_BASE_URL=/api
 VITE_DEV_USER_ID=<user-uuid>
 ```
 
+The Dashboard page replaces the final core placeholder with a workspace overview assembled from existing MVP APIs:
+
+- load accounts, transactions, budgets, debt summary, and reward events for the active workspace;
+- show account/budget counts, posted net cashflow, debt remaining in the workspace base currency, and reward-event count;
+- show recent transactions and recent reward events without adding a new backend reporting endpoint yet.
+
 The Settings page includes development-only helpers for the temporary auth phase:
 
 - create a local user through `POST /users`;

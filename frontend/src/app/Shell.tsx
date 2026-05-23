@@ -4,11 +4,11 @@ import { WorkspaceCard } from "../components/WorkspaceCard";
 import { AccountsPage } from "../features/accounts/AccountsPage";
 import { BudgetsPage } from "../features/budgets/BudgetsPage";
 import { CategoriesPage } from "../features/categories/CategoriesPage";
+import { DashboardPage } from "../features/dashboard/DashboardPage";
 import { DebtsPage } from "../features/debts/DebtsPage";
 import { ImportsPage } from "../features/imports/ImportsPage";
 import { RewardsPage } from "../features/rewards/RewardsPage";
 import { TransactionsPage } from "../features/transactions/TransactionsPage";
-import { FeaturePage } from "../pages/FeaturePage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { navigationItems } from "../routes/navigation";
@@ -42,7 +42,7 @@ export function Shell() {
 
       <main className="content">
         <Routes>
-          <Route index element={<FeaturePage title="Dashboard" description="Overview cards for spending, income, budgets, debts, rewards, and recent transactions." />} />
+          <Route index element={<DashboardPage activeWorkspace={activeWorkspace} />} />
           <Route path="transactions" element={<TransactionsPage activeWorkspace={activeWorkspace} />} />
           <Route path="accounts" element={<AccountsPage activeWorkspace={activeWorkspace} />} />
           <Route path="categories" element={<CategoriesPage activeWorkspace={activeWorkspace} />} />
