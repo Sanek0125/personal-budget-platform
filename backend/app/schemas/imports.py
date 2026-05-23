@@ -2,9 +2,10 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.services.csv_imports import CsvColumnMapping
+from app.services.import_parsers import SUPPORTED_IMPORT_PARSERS
 
 ImportBatchStatus = Literal[
     "uploaded", "parsed", "processed", "failed", "partially_processed"
@@ -19,7 +20,8 @@ class CsvImportUpload(BaseModel):
     account_id: UUID
     original_filename: str = Field(min_length=1)
     content: str = Field(min_length=1, max_length=5_000_000)
-    column_mapping: CsvColumnMapping
+    column_mapping: CsvColumnMapping | None = None
+    parser_name: str = "generic_csv"
     source_name: str | None = None
 
     @field_validator("original_filename")
@@ -29,6 +31,20 @@ class CsvImportUpload(BaseModel):
         if not value.lower().endswith(".csv"):
             raise ValueError("CSV imports require a .csv filename")
         return value
+
+    @field_validator("parser_name")
+    @classmethod
+    def validate_parser_name(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in SUPPORTED_IMPORT_PARSERS:
+            raise ValueError("Unsupported import parser")
+        return normalized
+
+    @model_validator(mode="after")
+    def require_mapping_for_generic_csv(self) -> "CsvImportUpload":
+        if self.parser_name == "generic_csv" and self.column_mapping is None:
+            raise ValueError("generic_csv imports require column_mapping")
+        return self
 
 
 class ImportBatchRead(BaseModel):

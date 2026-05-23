@@ -7,6 +7,7 @@ import type { Account, CsvImportUploadPayload, ImportBatch, ImportConfirmResult,
 export function ImportsPage({ activeWorkspace, currentUser }: { activeWorkspace?: Workspace; currentUser: User }) {
   const [accountId, setAccountId] = useState("");
   const [sourceName, setSourceName] = useState("");
+  const [parserName, setParserName] = useState<"generic_csv" | "freedom">("generic_csv");
   const [originalFilename, setOriginalFilename] = useState("");
   const [csvContent, setCsvContent] = useState("");
   const [currentBatch, setCurrentBatch] = useState<ImportBatch | null>(null);
@@ -31,18 +32,24 @@ export function ImportsPage({ activeWorkspace, currentUser }: { activeWorkspace?
     }
 
     setStatusMessage(null);
+    const trimmedSourceName = sourceName.trim();
     const payload: CsvImportUploadPayload = {
       user_id: currentUser.id,
       account_id: accountId,
       original_filename: originalFilename.trim(),
       content: csvContent.trim(),
-      ...(sourceName.trim() ? { source_name: sourceName.trim() } : {}),
-      column_mapping: {
-        occurred_at: "Date",
-        amount: "Amount",
-        currency_code: "Currency",
-        description: "Description",
-      },
+      ...(trimmedSourceName ? { source_name: trimmedSourceName } : parserName === "freedom" ? { source_name: "Freedom Bank" } : {}),
+      ...(parserName === "freedom"
+        ? { parser_name: "freedom" }
+        : {
+            parser_name: "generic_csv",
+            column_mapping: {
+              occurred_at: "Date",
+              amount: "Amount",
+              currency_code: "Currency",
+              description: "Description",
+            },
+          }),
     };
 
     try {
@@ -102,8 +109,15 @@ export function ImportsPage({ activeWorkspace, currentUser }: { activeWorkspace?
             </select>
           </label>
           <label>
+            Parser
+            <select value={parserName} onChange={(event) => setParserName(event.target.value as "generic_csv" | "freedom")}>
+              <option value="generic_csv">Generic CSV</option>
+              <option value="freedom">Freedom Bank</option>
+            </select>
+          </label>
+          <label>
             Source name
-            <input value={sourceName} onChange={(event) => setSourceName(event.target.value)} />
+            <input value={sourceName} onChange={(event) => setSourceName(event.target.value)} placeholder={parserName === "freedom" ? "Freedom Bank" : undefined} />
           </label>
           <label>
             Original filename
@@ -114,7 +128,7 @@ export function ImportsPage({ activeWorkspace, currentUser }: { activeWorkspace?
             <textarea value={csvContent} onChange={(event) => setCsvContent(event.target.value)} required />
           </label>
           <p>
-            Expected columns: <strong>Date, Amount, Currency, Description</strong>
+            Expected columns: <strong>{parserName === "freedom" ? "Freedom statement columns" : "Date, Amount, Currency, Description"}</strong>
           </p>
           <button type="submit" disabled={!activeWorkspace || !accountsQuery.data?.length}>Upload import</button>
           {currentBatch ? (
