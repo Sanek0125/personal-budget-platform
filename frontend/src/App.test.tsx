@@ -1097,7 +1097,7 @@ describe("App shell", () => {
     await user.type(screen.getByLabelText(/^description$/i), " Grocery run ");
     await user.type(screen.getByLabelText(/^amount$/i), "1250.50");
     await user.type(screen.getByLabelText(/^occurred at$/i), "2026-05-22T12:34");
-    await user.selectOptions(screen.getByLabelText(/category/i), "66666666-6666-6666-6666-666666666666");
+    await user.selectOptions(screen.getByLabelText(/^category$/i), "66666666-6666-6666-6666-666666666666");
     await user.type(screen.getByLabelText(/merchant/i), " Perekrestok ");
     await user.click(screen.getByRole("button", { name: /create transaction/i }));
 
@@ -1116,6 +1116,183 @@ describe("App shell", () => {
           description: "Grocery run",
           category_id: "66666666-6666-6666-6666-666666666666",
           merchant_name: "Perekrestok",
+        }),
+      }),
+    );
+  });
+
+  it("creates a split expense transaction", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "44444444-4444-4444-4444-444444444444",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              owner_user_id: null,
+              name: "Tinkoff Black",
+              type: "bank_card",
+              currency_code: "RUB",
+              institution_name: "T-Bank",
+              masked_number: "*1234",
+              opening_balance: "1500.00",
+              is_active: true,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "66666666-6666-6666-6666-666666666666",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              parent_id: null,
+              name: "Groceries",
+              type: "expense",
+              color: "#22c55e",
+              icon: "cart",
+              sort_order: 10,
+              is_system: false,
+            },
+            {
+              id: "77777777-7777-7777-7777-777777777777",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              parent_id: null,
+              name: "Household",
+              type: "expense",
+              color: "#0ea5e9",
+              icon: "home",
+              sort_order: 20,
+              is_system: false,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "88888888-8888-8888-8888-888888888888",
+            workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            account_id: "44444444-4444-4444-4444-444444444444",
+            user_id: null,
+            type: "expense",
+            status: "posted",
+            occurred_at: "2026-05-22T12:34:00Z",
+            booked_at: null,
+            amount: "-1250.50",
+            currency_code: "RUB",
+            original_amount: null,
+            original_currency_code: null,
+            base_amount: null,
+            base_currency_code: null,
+            exchange_rate_id: null,
+            exchange_rate: null,
+            description: "Split supermarket run",
+            merchant_name: null,
+            merchant_raw: null,
+            category_id: null,
+            category_confidence: null,
+            categorized_by: null,
+            notes: null,
+            source: "manual",
+            external_id: null,
+            fingerprint: "fingerprint-split",
+            created_at: null,
+            updated_at: null,
+            deleted_at: null,
+            splits: [
+              {
+                id: "11111111-1111-1111-1111-111111111111",
+                transaction_id: "88888888-8888-8888-8888-888888888888",
+                category_id: "66666666-6666-6666-6666-666666666666",
+                amount: "-1000.50",
+                currency_code: "RUB",
+                description: "Food",
+                sort_order: 1,
+                created_at: null,
+                updated_at: null,
+              },
+              {
+                id: "22222222-2222-2222-2222-222222222222",
+                transaction_id: "88888888-8888-8888-8888-888888888888",
+                category_id: "77777777-7777-7777-7777-777777777777",
+                amount: "-250.00",
+                currency_code: "RUB",
+                description: "Cleaning",
+                sort_order: 2,
+                created_at: null,
+                updated_at: null,
+              },
+            ],
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: /transactions/i }));
+    await user.selectOptions(await screen.findByLabelText(/^account$/i), "44444444-4444-4444-4444-444444444444");
+    await user.type(screen.getByLabelText(/^description$/i), "Split supermarket run");
+    await user.type(screen.getByLabelText(/^amount$/i), "1250.50");
+    await user.type(screen.getByLabelText(/^occurred at$/i), "2026-05-22T12:34");
+    await user.selectOptions(screen.getByLabelText(/split 1 category/i), "66666666-6666-6666-6666-666666666666");
+    await user.type(screen.getByLabelText(/split 1 amount/i), "1000.50");
+    await user.type(screen.getByLabelText(/split 1 description/i), "Food");
+    await user.selectOptions(screen.getByLabelText(/split 2 category/i), "77777777-7777-7777-7777-777777777777");
+    await user.type(screen.getByLabelText(/split 2 amount/i), "250.00");
+    await user.type(screen.getByLabelText(/split 2 description/i), "Cleaning");
+    await user.click(screen.getByRole("button", { name: /create transaction/i }));
+
+    expect(await screen.findByText(/created transaction Split supermarket run/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/transactions",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          account_id: "44444444-4444-4444-4444-444444444444",
+          type: "expense",
+          occurred_at: "2026-05-22T12:34:00.000Z",
+          amount: "-1250.50",
+          currency_code: "RUB",
+          description: "Split supermarket run",
+          splits: [
+            {
+              category_id: "66666666-6666-6666-6666-666666666666",
+              amount: "-1000.50",
+              currency_code: "RUB",
+              description: "Food",
+              sort_order: 1,
+            },
+            {
+              category_id: "77777777-7777-7777-7777-777777777777",
+              amount: "-250.00",
+              currency_code: "RUB",
+              description: "Cleaning",
+              sort_order: 2,
+            },
+          ],
         }),
       }),
     );

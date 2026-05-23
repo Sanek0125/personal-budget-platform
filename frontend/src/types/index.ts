@@ -121,6 +121,18 @@ export type CategoryRuleApplyResult = {
 export type TransactionType = "expense" | "income" | "adjustment" | "transfer";
 export type ManualTransactionType = "expense" | "income" | "adjustment";
 
+export type TransactionSplit = {
+  id: string;
+  transaction_id: string;
+  category_id: string | null;
+  amount: string;
+  currency_code: string;
+  description: string | null;
+  sort_order: number;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
 export type Transaction = {
   id: string;
   workspace_id: string;
@@ -151,7 +163,15 @@ export type Transaction = {
   created_at: string | null;
   updated_at: string | null;
   deleted_at: string | null;
-  splits: unknown[];
+  splits: TransactionSplit[];
+};
+
+export type TransactionSplitCreatePayload = {
+  category_id: string;
+  amount: string;
+  currency_code: string;
+  description?: string;
+  sort_order: number;
 };
 
 export type TransactionCreatePayload = {
@@ -164,6 +184,7 @@ export type TransactionCreatePayload = {
   category_id?: string;
   merchant_name?: string;
   notes?: string;
+  splits?: TransactionSplitCreatePayload[];
 };
 
 export type TransferCreatePayload = {

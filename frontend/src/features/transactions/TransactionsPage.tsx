@@ -8,6 +8,7 @@ import type {
   ManualTransactionType,
   Transaction,
   TransactionCreatePayload,
+  TransactionSplitCreatePayload,
   TransferCreatePayload,
   TransferRead,
   Workspace,
@@ -24,6 +25,12 @@ export function TransactionsPage({ activeWorkspace }: { activeWorkspace?: Worksp
   const [categoryId, setCategoryId] = useState("");
   const [merchantName, setMerchantName] = useState("");
   const [notes, setNotes] = useState("");
+  const [split1CategoryId, setSplit1CategoryId] = useState("");
+  const [split1Amount, setSplit1Amount] = useState("");
+  const [split1Description, setSplit1Description] = useState("");
+  const [split2CategoryId, setSplit2CategoryId] = useState("");
+  const [split2Amount, setSplit2Amount] = useState("");
+  const [split2Description, setSplit2Description] = useState("");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [transferFromAccountId, setTransferFromAccountId] = useState("");
   const [transferToAccountId, setTransferToAccountId] = useState("");
@@ -54,6 +61,31 @@ export function TransactionsPage({ activeWorkspace }: { activeWorkspace?: Worksp
   const selectedAccount = accountsById.get(accountId);
   const selectedTransferFromAccount = accountsById.get(transferFromAccountId);
 
+  function buildSplitPayload(): TransactionSplitCreatePayload[] {
+    return [
+      {
+        categoryId: split1CategoryId,
+        amount: split1Amount,
+        description: split1Description,
+        sortOrder: 1,
+      },
+      {
+        categoryId: split2CategoryId,
+        amount: split2Amount,
+        description: split2Description,
+        sortOrder: 2,
+      },
+    ]
+      .filter((split) => split.categoryId && split.amount.trim())
+      .map((split) => ({
+        category_id: split.categoryId,
+        amount: normalizeManualAmount(transactionType, split.amount),
+        currency_code: selectedAccount?.currency_code ?? "",
+        ...(split.description.trim() ? { description: split.description.trim() } : {}),
+        sort_order: split.sortOrder,
+      }));
+  }
+
   async function handleCreateTransaction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!activeWorkspace) {
@@ -66,6 +98,7 @@ export function TransactionsPage({ activeWorkspace }: { activeWorkspace?: Worksp
     }
 
     setStatusMessage(null);
+    const splits = buildSplitPayload();
     const payload: TransactionCreatePayload = {
       account_id: selectedAccount.id,
       type: transactionType,
@@ -76,6 +109,7 @@ export function TransactionsPage({ activeWorkspace }: { activeWorkspace?: Worksp
       ...(categoryId ? { category_id: categoryId } : {}),
       ...(merchantName.trim() ? { merchant_name: merchantName.trim() } : {}),
       ...(notes.trim() ? { notes: notes.trim() } : {}),
+      ...(splits.length ? { splits } : {}),
     };
 
     try {
@@ -90,6 +124,12 @@ export function TransactionsPage({ activeWorkspace }: { activeWorkspace?: Worksp
       setCategoryId("");
       setMerchantName("");
       setNotes("");
+      setSplit1CategoryId("");
+      setSplit1Amount("");
+      setSplit1Description("");
+      setSplit2CategoryId("");
+      setSplit2Amount("");
+      setSplit2Description("");
       await queryClient.invalidateQueries({ queryKey: ["transactions", activeWorkspace.id] });
     } catch {
       setStatusMessage("Unable to create transaction");
@@ -206,6 +246,48 @@ export function TransactionsPage({ activeWorkspace }: { activeWorkspace?: Worksp
             Notes
             <input value={notes} onChange={(event) => setNotes(event.target.value)} />
           </label>
+          <div className="settings-panel compact-panel">
+            <h4>Optional splits</h4>
+            <p>Split this transaction across up to two categories. Split amounts should add up to the transaction amount.</p>
+            <label>
+              Split 1 category
+              <select value={split1CategoryId} onChange={(event) => setSplit1CategoryId(event.target.value)}>
+                <option value="">No split</option>
+                {categoriesQuery.data?.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name} · {category.type}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Split 1 amount
+              <input inputMode="decimal" value={split1Amount} onChange={(event) => setSplit1Amount(event.target.value)} />
+            </label>
+            <label>
+              Split 1 description
+              <input value={split1Description} onChange={(event) => setSplit1Description(event.target.value)} />
+            </label>
+            <label>
+              Split 2 category
+              <select value={split2CategoryId} onChange={(event) => setSplit2CategoryId(event.target.value)}>
+                <option value="">No split</option>
+                {categoriesQuery.data?.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name} · {category.type}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Split 2 amount
+              <input inputMode="decimal" value={split2Amount} onChange={(event) => setSplit2Amount(event.target.value)} />
+            </label>
+            <label>
+              Split 2 description
+              <input value={split2Description} onChange={(event) => setSplit2Description(event.target.value)} />
+            </label>
+          </div>
           <button type="submit" disabled={!activeWorkspace || !accountsQuery.data?.length}>Create transaction</button>
           {statusMessage ? <p role="status">{statusMessage}</p> : null}
         </form>
@@ -294,6 +376,13 @@ export function TransactionsPage({ activeWorkspace }: { activeWorkspace?: Worksp
                       {transaction.type} · {transaction.amount} {transaction.currency_code}
                     </span>
                     <span>{[account?.name ?? transaction.account_id, category?.name ?? "Uncategorized"].join(" · ")}</span>
+                    {transaction.splits.length ? (
+                      <span>
+                        Splits: {transaction.splits
+                          .map((split) => `${categoriesById.get(split.category_id ?? "")?.name ?? "Uncategorized"} ${split.amount} ${split.currency_code}`)
+                          .join("; ")}
+                      </span>
+                    ) : null}
                     {transaction.merchant_name ? <span>Merchant: {transaction.merchant_name}</span> : null}
                     <span>Occurred: {new Date(transaction.occurred_at).toLocaleString()}</span>
                   </li>
