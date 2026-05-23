@@ -61,6 +61,12 @@ The Settings page includes development-only helpers for the temporary auth phase
 - find a user by normalized email through `GET /users?email=...`;
 - add the found user to the currently active workspace as `admin`, `member`, or `viewer`.
 
+The Accounts page is the first functional MVP page beyond Settings. It uses the active workspace loaded through development auth to:
+
+- list accounts from `GET /workspaces/{workspace_id}/accounts`;
+- create cash, card, bank, bonus, investment, crypto, or other accounts through `POST /workspaces/{workspace_id}/accounts`;
+- normalize the entered currency code to uppercase before sending it to the backend.
+
 ## Available scripts
 
 ```bash

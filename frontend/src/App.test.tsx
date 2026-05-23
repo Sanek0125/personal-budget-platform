@@ -68,6 +68,140 @@ describe("App shell", () => {
     expect(screen.getByText(/manual entries, splits, transfers, and imported operations/i)).toBeInTheDocument();
   });
 
+  it("lists accounts for the active workspace", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "44444444-4444-4444-4444-444444444444",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              owner_user_id: null,
+              name: "Tinkoff Black",
+              type: "bank_card",
+              currency_code: "RUB",
+              institution_name: "T-Bank",
+              masked_number: "*1234",
+              opening_balance: "1500.00",
+              is_active: true,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("link", { name: /accounts/i }));
+
+    expect(await screen.findByRole("heading", { name: /accounts/i })).toBeInTheDocument();
+    expect(await screen.findByText("Tinkoff Black")).toBeInTheDocument();
+    expect(screen.getByText(/bank_card · rub/i)).toBeInTheDocument();
+    expect(screen.getByText(/T-Bank · \*1234/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/accounts",
+      expect.objectContaining({
+        headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
+      }),
+    );
+  });
+
+  it("creates an account in the active workspace", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "55555555-5555-5555-5555-555555555555",
+            workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            owner_user_id: null,
+            name: "Cash Wallet",
+            type: "cash",
+            currency_code: "USD",
+            institution_name: null,
+            masked_number: null,
+            opening_balance: "25.50",
+            is_active: true,
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "55555555-5555-5555-5555-555555555555",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              owner_user_id: null,
+              name: "Cash Wallet",
+              type: "cash",
+              currency_code: "USD",
+              institution_name: null,
+              masked_number: null,
+              opening_balance: "25.50",
+              is_active: true,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("link", { name: /accounts/i }));
+    await user.type(await screen.findByLabelText(/account name/i), " Cash Wallet ");
+    await user.selectOptions(screen.getByLabelText(/account type/i), "cash");
+    await user.clear(screen.getByLabelText(/currency/i));
+    await user.type(screen.getByLabelText(/currency/i), "usd");
+    await user.type(screen.getByLabelText(/opening balance/i), "25.50");
+    await user.click(screen.getByRole("button", { name: /create account/i }));
+
+    expect(await screen.findByText(/created account Cash Wallet/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/accounts",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          name: "Cash Wallet",
+          type: "cash",
+          currency_code: "USD",
+          opening_balance: "25.50",
+        }),
+      }),
+    );
+  });
+
   it("creates a development user from settings", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
