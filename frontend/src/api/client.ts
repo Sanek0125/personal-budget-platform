@@ -1,4 +1,10 @@
 const DEFAULT_API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
+const DEFAULT_DEV_USER_ID =
+  import.meta.env.VITE_DEV_USER_ID ?? "00000000-0000-0000-0000-000000000001";
+
+type ApiRequestOptions = RequestInit & {
+  devUserId?: string;
+};
 
 export function buildApiUrl(path: string, baseUrl = DEFAULT_API_BASE_URL): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
@@ -11,14 +17,23 @@ export function buildApiUrl(path: string, baseUrl = DEFAULT_API_BASE_URL): strin
   return `${normalizedBase}${normalizedPath}`;
 }
 
-export async function apiGet<TResponse>(path: string, init?: RequestInit): Promise<TResponse> {
+function buildHeaders(init?: ApiRequestOptions): HeadersInit {
+  const devUserId = init?.devUserId ?? DEFAULT_DEV_USER_ID;
+  return {
+    Accept: "application/json",
+    ...(devUserId ? { "X-User-Id": devUserId } : {}),
+    ...init?.headers,
+  };
+}
+
+export async function apiGet<TResponse>(path: string, init?: ApiRequestOptions): Promise<TResponse> {
+  const requestInit: RequestInit = { ...init };
+  delete (requestInit as ApiRequestOptions).devUserId;
+
   const response = await fetch(buildApiUrl(path), {
-    ...init,
+    ...requestInit,
     method: "GET",
-    headers: {
-      Accept: "application/json",
-      ...init?.headers,
-    },
+    headers: buildHeaders(init),
   });
 
   if (!response.ok) {

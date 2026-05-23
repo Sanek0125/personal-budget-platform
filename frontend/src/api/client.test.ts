@@ -25,4 +25,27 @@ describe("apiGet", () => {
 
     fetchMock.mockRestore();
   });
+
+  it("sends the temporary development user header when configured", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response("[]", {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await apiGet("/workspaces", { devUserId: "11111111-1111-1111-1111-111111111111" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/workspaces",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Accept: "application/json",
+          "X-User-Id": "11111111-1111-1111-1111-111111111111",
+        }),
+      }),
+    );
+
+    fetchMock.mockRestore();
+  });
 });
