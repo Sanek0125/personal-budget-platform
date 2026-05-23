@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import re
 from datetime import UTC, datetime, time
 from decimal import Decimal, InvalidOperation
 from io import StringIO
@@ -79,6 +80,167 @@ _EXTERNAL_ID_COLUMNS = (
     "Transaction ID",
     "Reference",
 )
+_PDF_DATE_LINE_RE = re.compile(
+    r"^\s*(?P<date>\d{2}\.\d{2}\.\d{4})\s+(?P<document>\d+)\b"
+)
+_PDF_AMOUNT_RE = re.compile(r"\d[\d ]*(?:[.,]\d{2})?")
+
+
+def _looks_like_freedom_pdf_text(content: str) -> bool:
+    return (
+        "Выписка по" in content
+        and "Дата" in content
+        and "Дебет" in content
+        and "Кредит" in content
+        and "Назначение платежа" in content
+    )
+
+
+def _statement_currency(content: str) -> str:
+    match = re.search(r"(?im)^\s*Валюта:\s*([A-Z]{3})\s*$", content)
+    if match:
+        return match.group(1).upper()
+    raise HTTPException(status_code=422, detail="Missing Freedom statement currency")
+
+
+def _statement_column_positions(lines: list[str]) -> tuple[int, int, int]:
+    for line in lines:
+        if "Дебет" in line and "Кредит" in line:
+            return line.index("Дебет"), line.index("Кредит"), line.index("Назначение")
+    raise HTTPException(status_code=422, detail="Missing Freedom PDF amount header")
+
+
+def _is_amount_token_in_column(
+    token_start: int, column_start: int, next_column_start: int
+) -> bool:
+    return column_start - 2 <= token_start < next_column_start - 1
+
+
+def _tokens_in_column(
+    block: list[str], column_start: int, next_column_start: int
+) -> list[str]:
+    tokens: list[str] = []
+    for line in block:
+        for match in _PDF_AMOUNT_RE.finditer(line):
+            if _is_amount_token_in_column(
+                match.start(), column_start, next_column_start
+            ):
+                tokens.append(match.group(0))
+    return tokens
+
+
+def _pdf_amount(
+    block: list[str], debit_col: int, credit_col: int, description_col: int
+) -> Decimal:
+    debit_tokens = _tokens_in_column(block, debit_col, credit_col)
+    credit_tokens = _tokens_in_column(block, credit_col, description_col)
+    if debit_tokens and credit_tokens:
+        raise HTTPException(
+            status_code=422,
+            detail="Freedom PDF row cannot have both debit and credit amounts",
+        )
+    if debit_tokens:
+        return -abs(_parse_amount("".join(debit_tokens)))
+    if credit_tokens:
+        return abs(_parse_amount("".join(credit_tokens)))
+    raise HTTPException(status_code=422, detail="Missing Freedom PDF amount")
+
+
+def _pdf_raw_description(block: list[str], description_col: int) -> str:
+    description_start = max(0, description_col - 2)
+    parts = [
+        line[description_start:].strip()
+        for line in block
+        if len(line) > description_start
+    ]
+    return re.sub(r"\s+", " ", " ".join(part for part in parts if part)).strip()
+
+
+def _pdf_description(block: list[str], description_col: int) -> str:
+    description = _pdf_raw_description(block, description_col)
+    if description.startswith("операция:"):
+        description = description.removeprefix("операция:").strip()
+    elif " операция: " in description:
+        description = description.split(" операция: ", 1)[1].strip()
+    if not description:
+        raise HTTPException(status_code=422, detail="Missing Freedom PDF description")
+    return description
+
+
+def _pdf_occurred_at(row_date: str, description: str) -> str:
+    transaction_time = re.search(
+        r"транзакции:\s*(\d{2}\.\d{2}\.\d{4})\s+(\d{2}:\d{2}:\d{2})",
+        description,
+        flags=re.IGNORECASE,
+    )
+    if transaction_time:
+        return _parse_datetime(
+            f"{transaction_time.group(1)} {transaction_time.group(2)}"
+        )
+    return _parse_datetime(row_date)
+
+
+def _pdf_external_id(document_number: str, description: str) -> str:
+    rrn = re.search(r"РРН[:\s]*([0-9A-Za-z-]+)", description, flags=re.IGNORECASE)
+    if rrn:
+        return rrn.group(1)
+    return document_number
+
+
+def _parse_freedom_pdf_text_rows(content: str) -> list[ParsedCsvRow]:
+    lines = content.splitlines()
+    debit_col, credit_col, description_col = _statement_column_positions(lines)
+    currency_code = _statement_currency(content)
+    date_line_indexes = [
+        index for index, line in enumerate(lines) if _PDF_DATE_LINE_RE.match(line)
+    ]
+    if not date_line_indexes:
+        raise HTTPException(status_code=422, detail="Freedom PDF statement has no rows")
+
+    parsed_rows: list[ParsedCsvRow] = []
+    for row_number, date_line_index in enumerate(date_line_indexes, start=1):
+        date_match = _PDF_DATE_LINE_RE.match(lines[date_line_index])
+        if date_match is None:
+            continue
+        block_start = date_line_index
+        while block_start > 0 and lines[block_start - 1].strip():
+            block_start -= 1
+        block_end = date_line_index + 1
+        while block_end < len(lines) and lines[block_end].strip():
+            block_end += 1
+        block = lines[block_start:block_end]
+        amount = _pdf_amount(block, debit_col, credit_col, description_col)
+        raw_description = _pdf_raw_description(block, description_col)
+        description = _pdf_description(block, description_col)
+        document_number = date_match.group("document")
+        normalized_data: dict[str, Any] = {
+            "type": "expense" if amount < 0 else "income",
+            "occurred_at": _pdf_occurred_at(date_match.group("date"), raw_description),
+            "amount": str(amount),
+            "currency_code": currency_code,
+            "description": description,
+            "merchant_raw": description,
+            "external_id": _pdf_external_id(document_number, description),
+        }
+        raw_data = {
+            "statement_format": "freedom_pdf_text",
+            "operation_date": date_match.group("date"),
+            "document_number": document_number,
+            "debit": "".join(_tokens_in_column(block, debit_col, credit_col)),
+            "credit": "".join(_tokens_in_column(block, credit_col, description_col)),
+            "currency_code": currency_code,
+            "description": description,
+        }
+        parsed_rows.append(
+            ParsedCsvRow(
+                row_number=row_number,
+                raw_data=raw_data,
+                normalized_data=normalized_data,
+                raw_hash=_stable_hash(raw_data),
+                normalized_hash=_stable_hash(normalized_data),
+            )
+        )
+    return parsed_rows
 
 
 def _read_rows(content: str) -> list[dict[str, str]]:
@@ -228,6 +390,9 @@ def _normalized(raw: dict[str, str]) -> dict[str, Any]:
 
 
 def parse_freedom_rows(content: str) -> list[ParsedCsvRow]:
+    if _looks_like_freedom_pdf_text(content):
+        return _parse_freedom_pdf_text_rows(content)
+
     rows: list[ParsedCsvRow] = []
     for row_number, raw_data in enumerate(_read_rows(content), start=1):
         normalized_data = _normalized(raw_data)
