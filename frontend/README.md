@@ -55,6 +55,12 @@ VITE_API_BASE_URL=http://localhost:8000
 VITE_DEV_USER_ID=<user-uuid>
 ```
 
+The Settings page includes development-only helpers for the temporary auth phase:
+
+- create a local user through `POST /users`;
+- find a user by normalized email through `GET /users?email=...`;
+- add the found user to the currently active workspace as `admin`, `member`, or `viewer`.
+
 ## Available scripts
 
 ```bash
