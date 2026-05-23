@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.api.auth import require_workspace_member, require_workspace_writer
 from app.db.session import get_db_session
 from app.models.debt import Contact, Debt, DebtPayment
 from app.models.transaction import Transaction
@@ -113,7 +114,11 @@ async def _get_payment_transaction(
     return transaction
 
 
-@router.get("/workspaces/{workspace_id}/debts", response_model=list[DebtRead])
+@router.get(
+    "/workspaces/{workspace_id}/debts",
+    response_model=list[DebtRead],
+    dependencies=[Depends(require_workspace_member)],
+)
 async def list_debts(
     workspace_id: UUID,
     session: SessionDep,
@@ -139,6 +144,7 @@ async def list_debts(
     "/workspaces/{workspace_id}/debts",
     response_model=DebtRead,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_workspace_writer)],
 )
 async def create_debt(
     workspace_id: UUID,
@@ -195,6 +201,7 @@ async def create_debt(
     "/workspaces/{workspace_id}/debts/{debt_id}/payments",
     response_model=DebtPaymentRead,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_workspace_writer)],
 )
 async def create_debt_payment(
     workspace_id: UUID,
@@ -251,7 +258,11 @@ async def create_debt_payment(
     return payment
 
 
-@router.get("/workspaces/{workspace_id}/debts/summary", response_model=DebtSummaryRead)
+@router.get(
+    "/workspaces/{workspace_id}/debts/summary",
+    response_model=DebtSummaryRead,
+    dependencies=[Depends(require_workspace_member)],
+)
 async def get_debt_summary(workspace_id: UUID, session: SessionDep) -> DebtSummaryRead:
     result = await session.execute(
         select(Debt)

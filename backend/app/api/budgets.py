@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.api.auth import require_workspace_member, require_workspace_writer
 from app.db.session import get_db_session
 from app.models.budget import Budget, BudgetLimit
 from app.models.category import Category
@@ -88,7 +89,11 @@ async def _get_category_in_workspace(
     return category
 
 
-@router.get("/workspaces/{workspace_id}/budgets", response_model=list[BudgetRead])
+@router.get(
+    "/workspaces/{workspace_id}/budgets",
+    response_model=list[BudgetRead],
+    dependencies=[Depends(require_workspace_member)],
+)
 async def list_budgets(
     workspace_id: UUID,
     session: SessionDep,
@@ -113,6 +118,7 @@ async def list_budgets(
     "/workspaces/{workspace_id}/budgets",
     response_model=BudgetRead,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_workspace_writer)],
 )
 async def create_budget(
     workspace_id: UUID,

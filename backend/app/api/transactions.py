@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.api.auth import require_workspace_member, require_workspace_writer
 from app.db.session import get_db_session
 from app.models.account import Account
 from app.models.category import Category
@@ -216,7 +217,11 @@ def _split_rows(
     ]
 
 
-@router.get("", response_model=list[TransactionRead])
+@router.get(
+    "",
+    response_model=list[TransactionRead],
+    dependencies=[Depends(require_workspace_member)],
+)
 async def list_transactions(
     workspace_id: UUID,
     session: SessionDep,
@@ -252,7 +257,12 @@ async def list_transactions(
     return list(result.scalars().all())
 
 
-@router.post("", response_model=TransactionRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=TransactionRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_workspace_writer)],
+)
 async def create_transaction(
     workspace_id: UUID,
     payload: TransactionCreate,
@@ -324,7 +334,11 @@ async def _get_active_transaction(
     return transaction
 
 
-@router.get("/{transaction_id}", response_model=TransactionRead)
+@router.get(
+    "/{transaction_id}",
+    response_model=TransactionRead,
+    dependencies=[Depends(require_workspace_member)],
+)
 async def get_transaction(
     workspace_id: UUID,
     transaction_id: UUID,
@@ -333,7 +347,11 @@ async def get_transaction(
     return await _get_active_transaction(session, workspace_id, transaction_id)
 
 
-@router.patch("/{transaction_id}", response_model=TransactionRead)
+@router.patch(
+    "/{transaction_id}",
+    response_model=TransactionRead,
+    dependencies=[Depends(require_workspace_writer)],
+)
 async def update_transaction(
     workspace_id: UUID,
     transaction_id: UUID,
@@ -416,7 +434,11 @@ async def update_transaction(
     return transaction
 
 
-@router.delete("/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{transaction_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_workspace_writer)],
+)
 async def delete_transaction(
     workspace_id: UUID,
     transaction_id: UUID,
@@ -470,7 +492,10 @@ async def delete_transaction(
 
 
 @router.post(
-    "/transfers", response_model=TransferRead, status_code=status.HTTP_201_CREATED
+    "/transfers",
+    response_model=TransferRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_workspace_writer)],
 )
 async def create_transfer(
     workspace_id: UUID,

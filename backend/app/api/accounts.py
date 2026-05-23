@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.auth import require_workspace_member, require_workspace_writer
 from app.db.session import get_db_session
 from app.models.account import Account
 from app.models.workspace import Workspace, WorkspaceMember
@@ -15,7 +16,11 @@ router = APIRouter(prefix="/workspaces/{workspace_id}/accounts", tags=["accounts
 SessionDep = Annotated[AsyncSession, Depends(get_db_session)]
 
 
-@router.get("", response_model=list[AccountRead])
+@router.get(
+    "",
+    response_model=list[AccountRead],
+    dependencies=[Depends(require_workspace_member)],
+)
 async def list_accounts(
     workspace_id: UUID,
     session: SessionDep,
@@ -28,7 +33,12 @@ async def list_accounts(
     return list(result.scalars().all())
 
 
-@router.post("", response_model=AccountRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=AccountRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_workspace_writer)],
+)
 async def create_account(
     workspace_id: UUID,
     payload: AccountCreate,
