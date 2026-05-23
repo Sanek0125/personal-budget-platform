@@ -81,6 +81,43 @@ export type CategoryCreatePayload = {
   sort_order: number;
 };
 
+export type CategoryRuleOperator = "contains" | "equals" | "starts_with" | "regex" | "amount_between";
+export type CategoryRuleMatchField = "description" | "merchant_name" | "merchant_raw";
+
+export type CategoryRule = {
+  id: string;
+  workspace_id: string;
+  category_id: string;
+  name: string;
+  operator: CategoryRuleOperator;
+  match_field: CategoryRuleMatchField;
+  pattern: string | null;
+  amount_min: string | null;
+  amount_max: string | null;
+  priority: number;
+  is_active: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type CategoryRuleCreatePayload = {
+  name: string;
+  category_id: string;
+  operator: CategoryRuleOperator;
+  match_field: CategoryRuleMatchField;
+  pattern?: string;
+  amount_min?: string;
+  amount_max?: string;
+  priority: number;
+  is_active: boolean;
+};
+
+export type CategoryRuleApplyResult = {
+  evaluated_count: number;
+  categorized_count: number;
+  transaction_ids: string[];
+};
+
 export type TransactionType = "expense" | "income" | "adjustment" | "transfer";
 export type ManualTransactionType = "expense" | "income" | "adjustment";
 
