@@ -1074,6 +1074,156 @@ describe("App shell", () => {
     );
   });
 
+  it("shows budget progress and creates a category limit", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "99999999-9999-9999-9999-999999999999",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "May 2026 Budget",
+              period_type: "monthly",
+              period_start: "2026-05-01",
+              period_end: "2026-05-31",
+              currency_code: "RUB",
+              is_active: true,
+              created_at: null,
+              updated_at: null,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "77777777-7777-7777-7777-777777777777",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              parent_id: null,
+              name: "Groceries",
+              type: "expense",
+              color: null,
+              icon: null,
+              sort_order: 0,
+              is_system: false,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            budget_id: "99999999-9999-9999-9999-999999999999",
+            period_start: "2026-05-01",
+            period_end: "2026-05-31",
+            currency_code: "RUB",
+            total_limit: "10000.000000",
+            total_spent: "2500.000000",
+            total_remaining: "7500.000000",
+            limits: [
+              {
+                category_id: "77777777-7777-7777-7777-777777777777",
+                limit_amount: "10000.000000",
+                spent_amount: "2500.000000",
+                remaining_amount: "7500.000000",
+                percent_used: "25.00",
+                currency_code: "RUB",
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "88888888-8888-8888-8888-888888888888",
+            budget_id: "99999999-9999-9999-9999-999999999999",
+            category_id: "77777777-7777-7777-7777-777777777777",
+            amount: "12000.000000",
+            currency_code: "RUB",
+            rollover: false,
+            created_at: null,
+            updated_at: null,
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            budget_id: "99999999-9999-9999-9999-999999999999",
+            period_start: "2026-05-01",
+            period_end: "2026-05-31",
+            currency_code: "RUB",
+            total_limit: "12000.000000",
+            total_spent: "2500.000000",
+            total_remaining: "9500.000000",
+            limits: [
+              {
+                category_id: "77777777-7777-7777-7777-777777777777",
+                limit_amount: "12000.000000",
+                spent_amount: "2500.000000",
+                remaining_amount: "9500.000000",
+                percent_used: "20.83",
+                currency_code: "RUB",
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: /budgets/i }));
+
+    expect(await screen.findByText(/Total limit: 10000.000000 RUB/i)).toBeInTheDocument();
+    expect(screen.getByText(/Groceries: 2500.000000 spent of 10000.000000 RUB/i)).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText(/limit category/i), "77777777-7777-7777-7777-777777777777");
+    await user.clear(screen.getByLabelText(/limit amount/i));
+    await user.type(screen.getByLabelText(/limit amount/i), "12000");
+    await user.clear(screen.getByLabelText(/limit currency/i));
+    await user.type(screen.getByLabelText(/limit currency/i), "rub");
+    await user.click(screen.getByRole("button", { name: /add budget limit/i }));
+
+    expect(await screen.findByText(/created budget limit for Groceries/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Total limit: 12000.000000 RUB/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/budgets/99999999-9999-9999-9999-999999999999/limits",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ Authorization: `Bearer ${TEST_TOKEN}` }),
+        body: JSON.stringify({
+          category_id: "77777777-7777-7777-7777-777777777777",
+          amount: "12000",
+          currency_code: "RUB",
+          rollover: false,
+        }),
+      }),
+    );
+  });
+
   it("uploads a CSV import and previews normalized rows", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
