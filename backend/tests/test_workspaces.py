@@ -7,13 +7,14 @@ from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from app.api.workspaces import (
+    add_workspace_member,
     create_workspace,
     get_workspace,
     list_workspace_members,
     list_workspaces,
 )
 from app.models import Workspace, WorkspaceMember
-from app.schemas.workspace import WorkspaceCreate
+from app.schemas.workspace import WorkspaceCreate, WorkspaceMemberCreate
 
 
 class _ScalarResult:
@@ -281,3 +282,114 @@ async def test_list_workspace_members_returns_members_for_member() -> None:
 
     assert result == members
     assert len(session.statements) == 2
+
+
+async def test_add_workspace_member_requires_owner_or_admin() -> None:
+    workspace_id = uuid4()
+    current_user_id = uuid4()
+    target_user_id = uuid4()
+    session = _FakeAsyncSession(
+        WorkspaceMember(
+            id=uuid4(),
+            workspace_id=workspace_id,
+            user_id=current_user_id,
+            role="member",
+        )
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await add_workspace_member(  # type: ignore[arg-type]
+            workspace_id,
+            WorkspaceMemberCreate(user_id=target_user_id, role="viewer"),
+            current_user_id,
+            session,
+        )
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Workspace admin permission required"
+    assert session.added == []
+
+
+async def test_add_workspace_member_creates_membership_for_existing_user() -> None:
+    workspace_id = uuid4()
+    current_user_id = uuid4()
+    target_user_id = uuid4()
+    session = _FakeAsyncSession(
+        WorkspaceMember(
+            id=uuid4(),
+            workspace_id=workspace_id,
+            user_id=current_user_id,
+            role="admin",
+        ),
+        target_user_id,
+    )
+
+    membership = await add_workspace_member(  # type: ignore[arg-type]
+        workspace_id,
+        WorkspaceMemberCreate(user_id=target_user_id, role="member"),
+        current_user_id,
+        session,
+    )
+
+    assert isinstance(membership, WorkspaceMember)
+    assert membership.workspace_id == workspace_id
+    assert membership.user_id == target_user_id
+    assert membership.role == "member"
+    assert session.added == [membership]
+    assert session.committed is True
+    assert session.refreshed is membership
+
+
+async def test_add_workspace_member_returns_404_when_target_user_missing() -> None:
+    workspace_id = uuid4()
+    current_user_id = uuid4()
+    target_user_id = uuid4()
+    session = _FakeAsyncSession(
+        WorkspaceMember(
+            id=uuid4(),
+            workspace_id=workspace_id,
+            user_id=current_user_id,
+            role="owner",
+        ),
+        None,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await add_workspace_member(  # type: ignore[arg-type]
+            workspace_id,
+            WorkspaceMemberCreate(user_id=target_user_id, role="member"),
+            current_user_id,
+            session,
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "User not found"
+    assert session.added == []
+
+
+async def test_add_workspace_member_rolls_back_duplicate_membership() -> None:
+    workspace_id = uuid4()
+    current_user_id = uuid4()
+    target_user_id = uuid4()
+    session = _FakeAsyncSession(
+        WorkspaceMember(
+            id=uuid4(),
+            workspace_id=workspace_id,
+            user_id=current_user_id,
+            role="owner",
+        ),
+        target_user_id,
+        commit_error=IntegrityError("insert", {}, Exception("duplicate")),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await add_workspace_member(  # type: ignore[arg-type]
+            workspace_id,
+            WorkspaceMemberCreate(user_id=target_user_id, role="viewer"),
+            current_user_id,
+            session,
+        )
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == "Unable to add workspace member"
+    assert session.rolled_back is True

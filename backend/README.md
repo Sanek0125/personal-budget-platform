@@ -74,6 +74,26 @@ SELECT * FROM transactions LIMIT 10;
 \q
 ```
 
+## Development users and workspace members
+
+Until production auth is chosen, the backend uses temporary development auth with the `X-User-Id` header. Create users and add them to a workspace through HTTP instead of direct SQL:
+
+```bash
+# Create a user
+curl -s -X POST http://localhost:8000/users \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"vasily@example.com","display_name":"Василий"}'
+
+# Add an existing user to a workspace as admin/member/viewer.
+# The X-User-Id value must belong to a current workspace owner or admin.
+curl -s -X POST http://localhost:8000/workspaces/<workspace-id>/members \
+  -H 'Content-Type: application/json' \
+  -H 'X-User-Id: <owner-or-admin-user-id>' \
+  -d '{"user_id":"<new-user-id>","role":"member"}'
+```
+
+Use the created user's UUID in the frontend with `VITE_DEV_USER_ID`.
+
 ## Checks
 
 Run backend formatting/lint checks and tests:

@@ -922,6 +922,34 @@ Open decision:
 
 - Exact auth mechanism: classic email/password, magic link, Telegram-first, or OAuth.
 
+### Phase 13: User management and workspace invitations
+
+Purpose: make development and family/shared workspaces usable without direct SQL while full production auth is still undecided.
+
+Tasks:
+
+1. Add user-management schemas and endpoints:
+   - `POST /users` — create a user with optional email/Telegram linkage and display name;
+   - `GET /users/{user_id}` — fetch a user by id;
+   - `GET /users?email=...` — find users by normalized email for adding to workspaces.
+2. Add workspace member management:
+   - `POST /workspaces/{workspace_id}/members` — add an existing user as `admin`, `member`, or `viewer`;
+   - later: `PATCH /workspaces/{workspace_id}/members/{member_id}` for role changes;
+   - later: `DELETE /workspaces/{workspace_id}/members/{member_id}` for removal.
+3. Permission rule for this temporary phase:
+   - user creation remains open/dev-friendly until real auth exists;
+   - adding members requires current requester to be workspace `owner` or `admin`;
+   - do not allow creating a second `owner` through the add-member endpoint.
+4. Update frontend/dev docs so local users can be created through HTTP and then used via `VITE_DEV_USER_ID`.
+5. Add tests for user creation, email normalization, duplicate handling, member-add permissions, missing users, and duplicate memberships.
+
+Endpoints draft:
+
+- `POST /users`
+- `GET /users/{user_id}`
+- `GET /users?email={email}`
+- `POST /workspaces/{workspace_id}/members`
+
 ---
 
 ## 6. Frontend implementation plan
@@ -1122,10 +1150,11 @@ Recommended order:
 8. Budgets.
 9. Debts.
 10. Rewards/cashback.
-11. React frontend core.
-12. Import UI.
-13. Budget/debt/reward UI.
-14. Telegram quick-entry prototype.
+11. User-management API for creating users and adding workspace members during the dev-auth phase.
+12. React frontend core.
+13. Import UI.
+14. Budget/debt/reward UI.
+15. Telegram quick-entry prototype.
 
 Reasoning:
 

@@ -11,7 +11,12 @@ from app.db.session import get_db_session
 from app.models.currency import Currency
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMember
-from app.schemas.workspace import WorkspaceCreate, WorkspaceMemberRead, WorkspaceRead
+from app.schemas.workspace import (
+    WorkspaceCreate,
+    WorkspaceMemberCreate,
+    WorkspaceMemberRead,
+    WorkspaceRead,
+)
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 SessionDep = Annotated[AsyncSession, Depends(get_db_session)]
@@ -128,3 +133,59 @@ async def list_workspace_members(
         .order_by(WorkspaceMember.created_at, WorkspaceMember.id)
     )
     return list(result.scalars().all())
+
+
+@router.post(
+    "/{workspace_id}/members",
+    response_model=WorkspaceMemberRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_workspace_member(
+    workspace_id: UUID,
+    payload: WorkspaceMemberCreate,
+    user_id: CurrentUserDep,
+    session: SessionDep,
+) -> WorkspaceMember:
+    requester_result = await session.execute(
+        select(WorkspaceMember).where(
+            WorkspaceMember.workspace_id == workspace_id,
+            WorkspaceMember.user_id == user_id,
+        )
+    )
+    requester_membership = requester_result.scalar_one_or_none()
+    if requester_membership is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workspace not found",
+        )
+    if requester_membership.role not in {"owner", "admin"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Workspace admin permission required",
+        )
+
+    target_user_result = await session.execute(
+        select(User.id).where(User.id == payload.user_id)
+    )
+    if target_user_result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    membership = WorkspaceMember(
+        workspace_id=workspace_id,
+        user_id=payload.user_id,
+        role=payload.role,
+    )
+    session.add(membership)
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=422,
+            detail="Unable to add workspace member",
+        ) from exc
+    await session.refresh(membership)
+    return membership
