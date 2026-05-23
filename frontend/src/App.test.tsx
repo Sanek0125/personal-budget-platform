@@ -690,6 +690,224 @@ describe("App shell", () => {
     );
   });
 
+  it("uploads a CSV import and previews normalized rows", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "44444444-4444-4444-4444-444444444444",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              owner_user_id: null,
+              name: "Tinkoff Black",
+              type: "bank_card",
+              currency_code: "RUB",
+              institution_name: "T-Bank",
+              masked_number: "*1234",
+              opening_balance: "1500.00",
+              is_active: true,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            user_id: "00000000-0000-0000-0000-000000000001",
+            account_id: "44444444-4444-4444-4444-444444444444",
+            file_id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+            source_type: "csv",
+            source_name: "T-Bank",
+            original_filename: "statement.csv",
+            file_hash: "hash-1",
+            file_size: 72,
+            status: "parsed",
+            total_rows: 1,
+            imported_count: 0,
+            duplicate_count: 0,
+            error_count: 0,
+            parser_version: "csv-v1",
+            uploaded_at: null,
+            processed_at: null,
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+              import_batch_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              row_number: 1,
+              raw_data: { Date: "2026-05-21", Amount: "-12.34", Currency: "rub", Description: "Lunch" },
+              normalized_data: {
+                type: "expense",
+                occurred_at: "2026-05-21T00:00:00+00:00",
+                amount: "-12.34",
+                currency_code: "RUB",
+                description: "Lunch",
+              },
+              raw_hash: "raw-hash",
+              normalized_hash: "normalized-hash",
+              status: "pending",
+              error_message: null,
+              transaction_id: null,
+              created_at: null,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("link", { name: /imports/i }));
+    await user.selectOptions(await screen.findByLabelText(/target account/i), "44444444-4444-4444-4444-444444444444");
+    await user.type(screen.getByLabelText(/source name/i), " T-Bank ");
+    await user.type(screen.getByLabelText(/original filename/i), "statement.csv");
+    await user.type(
+      screen.getByLabelText(/csv content/i),
+      "Date,Amount,Currency,Description{enter}2026-05-21,-12.34,rub,Lunch",
+    );
+    await user.click(screen.getByRole("button", { name: /upload import/i }));
+
+    expect(await screen.findByText(/uploaded import statement.csv/i)).toBeInTheDocument();
+    expect(await screen.findByText("Lunch")).toBeInTheDocument();
+    expect(screen.getByText(/expense · -12.34 RUB · pending/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/imports/upload",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          user_id: "00000000-0000-0000-0000-000000000001",
+          account_id: "44444444-4444-4444-4444-444444444444",
+          original_filename: "statement.csv",
+          content: "Date,Amount,Currency,Description\n2026-05-21,-12.34,rub,Lunch",
+          source_name: "T-Bank",
+          column_mapping: {
+            occurred_at: "Date",
+            amount: "Amount",
+            currency_code: "Currency",
+            description: "Description",
+          },
+        }),
+      }),
+    );
+  });
+
+  it("confirms an uploaded import batch", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "44444444-4444-4444-4444-444444444444",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              owner_user_id: null,
+              name: "Tinkoff Black",
+              type: "bank_card",
+              currency_code: "RUB",
+              institution_name: "T-Bank",
+              masked_number: "*1234",
+              opening_balance: "1500.00",
+              is_active: true,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            user_id: "00000000-0000-0000-0000-000000000001",
+            account_id: "44444444-4444-4444-4444-444444444444",
+            file_id: null,
+            source_type: "csv",
+            source_name: null,
+            original_filename: "statement.csv",
+            file_hash: "hash-1",
+            file_size: 72,
+            status: "parsed",
+            total_rows: 1,
+            imported_count: 0,
+            duplicate_count: 0,
+            error_count: 0,
+            parser_version: "csv-v1",
+            uploaded_at: null,
+            processed_at: null,
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            import_batch_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            imported_count: 1,
+            duplicate_count: 0,
+            error_count: 0,
+            transaction_ids: ["88888888-8888-8888-8888-888888888888"],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("link", { name: /imports/i }));
+    await user.selectOptions(await screen.findByLabelText(/target account/i), "44444444-4444-4444-4444-444444444444");
+    await user.type(screen.getByLabelText(/original filename/i), "statement.csv");
+    await user.type(screen.getByLabelText(/csv content/i), "Date,Amount,Currency,Description{enter}2026-05-21,-12.34,rub,Lunch");
+    await user.click(screen.getByRole("button", { name: /upload import/i }));
+    await user.click(await screen.findByRole("button", { name: /confirm import/i }));
+
+    expect(await screen.findByText(/confirmed import: 1 imported, 0 duplicates, 0 errors/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      5,
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/imports/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/confirm",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({}) }),
+    );
+  });
+
   it("creates a development user from settings", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

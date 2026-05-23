@@ -1,5 +1,5 @@
 const DEFAULT_API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
-const DEFAULT_DEV_USER_ID =
+export const DEFAULT_DEV_USER_ID =
   import.meta.env.VITE_DEV_USER_ID ?? "00000000-0000-0000-0000-000000000001";
 
 type ApiRequestOptions = RequestInit & {

@@ -95,6 +95,13 @@ The Budgets page connects the monthly planning API to the active workspace:
 - create monthly budgets through `POST /workspaces/{workspace_id}/budgets`;
 - normalize budget currency codes to uppercase and keep categories loaded for upcoming limit planning.
 
+The Imports page connects the CSV import preview and confirmation flow to the active workspace:
+
+- load target accounts from `GET /workspaces/{workspace_id}/accounts`;
+- upload simple CSV statements through `POST /workspaces/{workspace_id}/imports/upload` using the default column mapping `Date`, `Amount`, `Currency`, and `Description`;
+- preview normalized rows from `GET /workspaces/{workspace_id}/imports/{import_batch_id}/rows`;
+- confirm parsed rows into transactions through `POST /workspaces/{workspace_id}/imports/{import_batch_id}/confirm`.
+
 ## Available scripts
 
 ```bash
