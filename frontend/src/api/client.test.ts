@@ -48,6 +48,47 @@ describe("apiGet", () => {
 
     fetchMock.mockRestore();
   });
+
+
+  it("does not send a development user header unless explicitly requested", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response("[]", {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await apiGet("/workspaces");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/workspaces",
+      expect.objectContaining({
+        headers: expect.not.objectContaining({ "X-User-Id": expect.any(String) }),
+      }),
+    );
+
+    fetchMock.mockRestore();
+  });
+
+  it("sends bearer Authorization when a token is provided", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response("[]", {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await apiGet("/workspaces", { accessToken: "test-token" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/workspaces",
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: "Bearer test-token" }),
+      }),
+    );
+
+    fetchMock.mockRestore();
+  });
 });
 
 describe("apiPost", () => {

@@ -193,7 +193,9 @@ a {
 }
 
 .settings-panel input,
-.settings-panel select {
+.settings-panel select,
+.settings-panel textarea,
+.auth-card input {
   width: 100%;
   border: 1px solid #cbd5e1;
   border-radius: 0.75rem;
@@ -203,7 +205,8 @@ a {
 }
 
 .settings-panel button,
-.primary-link {
+.primary-link,
+.auth-card button {
   justify-self: start;
   border: 0;
   border-radius: 0.75rem;
@@ -218,9 +221,70 @@ a {
 .settings-panel button:hover,
 .settings-panel button:focus-visible,
 .primary-link:hover,
-.primary-link:focus-visible {
+.primary-link:focus-visible,
+.auth-card button:hover,
+.auth-card button:focus-visible {
   background: #0284c7;
   outline: none;
+}
+
+.auth-screen {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 2rem;
+}
+
+.auth-card {
+  display: grid;
+  width: min(100%, 28rem);
+  gap: 1rem;
+  border-radius: 1.25rem;
+  padding: 2rem;
+  background: #ffffff;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
+}
+
+.auth-card h1,
+.auth-card p {
+  margin: 0;
+}
+
+.auth-card form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.auth-card label,
+.auth-summary {
+  display: grid;
+  gap: 0.35rem;
+  color: #334155;
+  font-weight: 700;
+}
+
+.link-button {
+  background: transparent !important;
+  color: #0284c7 !important;
+  padding: 0 !important;
+}
+
+.auth-summary {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 1rem;
+  padding: 0.85rem;
+  color: #e5edf8;
+}
+
+.auth-summary button {
+  justify-self: start;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 0.7rem;
+  padding: 0.45rem 0.7rem;
+  background: transparent;
+  color: #e5edf8;
+  font: inherit;
+  cursor: pointer;
 }
 
 .user-result {

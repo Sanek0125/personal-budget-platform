@@ -1,10 +1,23 @@
 const DEFAULT_API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
-export const DEFAULT_DEV_USER_ID =
-  import.meta.env.VITE_DEV_USER_ID ?? "00000000-0000-0000-0000-000000000001";
+export const AUTH_TOKEN_STORAGE_KEY = "personal-budget.auth-token";
+export const EXPLICIT_DEV_USER_ID = import.meta.env.VITE_DEV_USER_ID;
 
 type ApiRequestOptions = RequestInit & {
+  accessToken?: string | null;
   devUserId?: string;
 };
+
+export function readStoredAccessToken(): string | null {
+  return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+}
+
+export function storeAccessToken(accessToken: string) {
+  localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, accessToken);
+}
+
+export function clearAccessToken() {
+  localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+}
 
 export function buildApiUrl(path: string, baseUrl = DEFAULT_API_BASE_URL): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
@@ -18,11 +31,12 @@ export function buildApiUrl(path: string, baseUrl = DEFAULT_API_BASE_URL): strin
 }
 
 function buildHeaders(init?: ApiRequestOptions, hasJsonBody = false): HeadersInit {
-  const devUserId = init?.devUserId ?? DEFAULT_DEV_USER_ID;
+  const accessToken = init?.accessToken === undefined ? readStoredAccessToken() : init.accessToken;
   return {
     Accept: "application/json",
     ...(hasJsonBody ? { "Content-Type": "application/json" } : {}),
-    ...(devUserId ? { "X-User-Id": devUserId } : {}),
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    ...(init?.devUserId ? { "X-User-Id": init.devUserId } : {}),
     ...init?.headers,
   };
 }
@@ -42,6 +56,7 @@ async function parseResponse<TResponse>(response: Response): Promise<TResponse> 
 
 function sanitizeRequestInit(init?: ApiRequestOptions): RequestInit {
   const requestInit: RequestInit = { ...init };
+  delete (requestInit as ApiRequestOptions).accessToken;
   delete (requestInit as ApiRequestOptions).devUserId;
   return requestInit;
 }

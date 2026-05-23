@@ -1,10 +1,10 @@
 import { type FormEvent, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { DEFAULT_DEV_USER_ID, apiGet, apiPost } from "../../api/client";
-import type { Account, CsvImportUploadPayload, ImportBatch, ImportConfirmResult, ImportRow, Workspace } from "../../types";
+import { apiGet, apiPost } from "../../api/client";
+import type { Account, CsvImportUploadPayload, ImportBatch, ImportConfirmResult, ImportRow, User, Workspace } from "../../types";
 
-export function ImportsPage({ activeWorkspace }: { activeWorkspace?: Workspace }) {
+export function ImportsPage({ activeWorkspace, currentUser }: { activeWorkspace?: Workspace; currentUser: User }) {
   const [accountId, setAccountId] = useState("");
   const [sourceName, setSourceName] = useState("");
   const [originalFilename, setOriginalFilename] = useState("");
@@ -32,7 +32,7 @@ export function ImportsPage({ activeWorkspace }: { activeWorkspace?: Workspace }
 
     setStatusMessage(null);
     const payload: CsvImportUploadPayload = {
-      user_id: DEFAULT_DEV_USER_ID,
+      user_id: currentUser.id,
       account_id: accountId,
       original_filename: originalFilename.trim(),
       content: csvContent.trim(),
