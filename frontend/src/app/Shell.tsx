@@ -6,6 +6,7 @@ import { BudgetsPage } from "../features/budgets/BudgetsPage";
 import { CategoriesPage } from "../features/categories/CategoriesPage";
 import { DebtsPage } from "../features/debts/DebtsPage";
 import { ImportsPage } from "../features/imports/ImportsPage";
+import { RewardsPage } from "../features/rewards/RewardsPage";
 import { TransactionsPage } from "../features/transactions/TransactionsPage";
 import { FeaturePage } from "../pages/FeaturePage";
 import { NotFoundPage } from "../pages/NotFoundPage";
@@ -48,7 +49,7 @@ export function Shell() {
           <Route path="imports" element={<ImportsPage activeWorkspace={activeWorkspace} />} />
           <Route path="budgets" element={<BudgetsPage activeWorkspace={activeWorkspace} />} />
           <Route path="debts" element={<DebtsPage activeWorkspace={activeWorkspace} />} />
-          <Route path="rewards" element={<FeaturePage title="Rewards" description="Cashback, points, miles, accrual rules, and reward balances." />} />
+          <Route path="rewards" element={<RewardsPage activeWorkspace={activeWorkspace} />} />
           <Route path="settings" element={<SettingsPage activeWorkspace={activeWorkspace} />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>

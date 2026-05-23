@@ -109,6 +109,14 @@ The Debts page connects the workspace debt tracking API to:
 - create simple debts with a new contact name through `POST /workspaces/{workspace_id}/debts`;
 - normalize debt currency codes to uppercase before sending them to the backend.
 
+The Rewards page connects the reward program and manual event APIs to:
+
+- list reward programs from `GET /workspaces/{workspace_id}/rewards/programs`;
+- create cashback, points, or miles programs through `POST /workspaces/{workspace_id}/rewards/programs`;
+- list reward events from `GET /workspaces/{workspace_id}/rewards/events`;
+- create manual posted/expected/cancelled reward events through `POST /workspaces/{workspace_id}/rewards/events`;
+- keep cashback rules, expected-reward calculation, linked transactions, and balance dashboards out of the first frontend MVP.
+
 ## Available scripts
 
 ```bash

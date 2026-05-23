@@ -260,4 +260,62 @@ export type DebtSummary = {
   totals: DebtSummaryTotal[];
 };
 
+export type RewardProgramType = "cashback" | "points" | "miles";
+export type RewardEventType = "earned" | "redeemed" | "adjusted" | "expired";
+export type RewardEventStatus = "expected" | "posted" | "cancelled";
+export type RewardKind = "cashback" | "points" | "miles";
+
+export type RewardProgram = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  program_type: RewardProgramType;
+  currency_code: string | null;
+  issuer_name: string | null;
+  is_active: boolean;
+  notes: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type RewardProgramCreatePayload = {
+  name: string;
+  program_type: RewardProgramType;
+  currency_code?: string;
+  issuer_name?: string;
+  is_active: boolean;
+  notes?: string;
+};
+
+export type RewardEvent = {
+  id: string;
+  workspace_id: string;
+  program_id: string;
+  cashback_rule_id: string | null;
+  source_transaction_id: string | null;
+  reward_transaction_id: string | null;
+  event_type: RewardEventType;
+  status: RewardEventStatus;
+  reward_kind: RewardKind;
+  amount: string;
+  currency_code: string | null;
+  occurred_at: string;
+  description: string;
+  notes: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type RewardEventCreatePayload = {
+  program_id: string;
+  event_type: RewardEventType;
+  status: RewardEventStatus;
+  reward_kind: RewardKind;
+  amount: string;
+  currency_code?: string;
+  occurred_at: string;
+  description?: string;
+  notes?: string;
+};
+
 export type AssignableRole = "admin" | "member" | "viewer";
