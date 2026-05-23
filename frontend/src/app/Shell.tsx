@@ -85,8 +85,8 @@ export function Shell() {
       </aside>
 
       <main className="content">
-        {shouldShowWorkspaceOnboarding && currentUser ? (
-          <FirstWorkspaceOnboarding currentUser={currentUser} onWorkspaceCreated={handleWorkspaceCreated} />
+        {shouldShowWorkspaceOnboarding ? (
+          <FirstWorkspaceOnboarding onWorkspaceCreated={handleWorkspaceCreated} />
         ) : (
           <Routes>
             <Route index element={<DashboardPage activeWorkspace={activeWorkspace} />} />

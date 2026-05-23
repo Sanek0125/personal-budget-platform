@@ -2,14 +2,13 @@ import { type FormEvent, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 
 import { apiPost } from "../api/client";
-import type { User, Workspace, WorkspaceCreatePayload, WorkspaceKind } from "../types";
+import type { Workspace, WorkspaceCreatePayload, WorkspaceKind } from "../types";
 
 type FirstWorkspaceOnboardingProps = {
-  currentUser: User;
   onWorkspaceCreated: (workspace: Workspace) => void;
 };
 
-export function FirstWorkspaceOnboarding({ currentUser, onWorkspaceCreated }: FirstWorkspaceOnboardingProps) {
+export function FirstWorkspaceOnboarding({ onWorkspaceCreated }: FirstWorkspaceOnboardingProps) {
   const [name, setName] = useState("Personal Budget");
   const [kind, setKind] = useState<WorkspaceKind>("personal");
   const [baseCurrencyCode, setBaseCurrencyCode] = useState("RUB");
@@ -33,7 +32,6 @@ export function FirstWorkspaceOnboarding({ currentUser, onWorkspaceCreated }: Fi
       name: name.trim(),
       kind,
       base_currency_code: baseCurrencyCode.trim().toUpperCase(),
-      owner_user_id: currentUser.id,
     });
   }
 
