@@ -102,6 +102,13 @@ The Imports page connects the CSV import preview and confirmation flow to the ac
 - preview normalized rows from `GET /workspaces/{workspace_id}/imports/{import_batch_id}/rows`;
 - confirm parsed rows into transactions through `POST /workspaces/{workspace_id}/imports/{import_batch_id}/confirm`.
 
+The Debts page connects the workspace debt tracking API to:
+
+- list debts from `GET /workspaces/{workspace_id}/debts`;
+- display direction/currency totals from `GET /workspaces/{workspace_id}/debts/summary`;
+- create simple debts with a new contact name through `POST /workspaces/{workspace_id}/debts`;
+- normalize debt currency codes to uppercase before sending them to the backend.
+
 ## Available scripts
 
 ```bash
