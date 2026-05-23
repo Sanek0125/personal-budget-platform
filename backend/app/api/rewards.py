@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.api.auth import require_workspace_member, require_workspace_writer
 from app.db.session import get_db_session
 from app.models.category import Category
 from app.models.reward import CashbackRule, RewardEvent, RewardProgram
@@ -115,6 +116,7 @@ async def _get_cashback_rule_for_program(
 @router.get(
     "/workspaces/{workspace_id}/rewards/programs",
     response_model=list[RewardProgramRead],
+    dependencies=[Depends(require_workspace_member)],
 )
 async def list_reward_programs(
     workspace_id: UUID,
@@ -140,6 +142,7 @@ async def list_reward_programs(
     "/workspaces/{workspace_id}/rewards/programs",
     response_model=RewardProgramRead,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_workspace_writer)],
 )
 async def create_reward_program(
     workspace_id: UUID,
@@ -173,6 +176,7 @@ async def create_reward_program(
     "/workspaces/{workspace_id}/rewards/cashback-rules",
     response_model=CashbackRuleRead,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_workspace_writer)],
 )
 async def create_cashback_rule(
     workspace_id: UUID,
@@ -211,6 +215,7 @@ async def create_cashback_rule(
 @router.get(
     "/workspaces/{workspace_id}/rewards/events",
     response_model=list[RewardEventRead],
+    dependencies=[Depends(require_workspace_member)],
 )
 async def list_reward_events(
     workspace_id: UUID,
@@ -236,6 +241,7 @@ async def list_reward_events(
     "/workspaces/{workspace_id}/rewards/events",
     response_model=RewardEventRead,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_workspace_writer)],
 )
 async def create_reward_event(
     workspace_id: UUID,
@@ -303,6 +309,7 @@ async def create_reward_event(
 @router.post(
     "/workspaces/{workspace_id}/rewards/expected",
     response_model=ExpectedRewardRead,
+    dependencies=[Depends(require_workspace_member)],
 )
 async def calculate_expected_reward(
     workspace_id: UUID,

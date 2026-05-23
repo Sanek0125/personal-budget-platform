@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.auth import require_workspace_member, require_workspace_writer
 from app.db.session import get_db_session
 from app.models.category import Category
 from app.models.category_rule import CategoryRule, CategoryRuleMatch
@@ -54,6 +55,7 @@ async def _ensure_workspace_exists(
 @router.get(
     "/workspaces/{workspace_id}/category-rules",
     response_model=list[CategoryRuleRead],
+    dependencies=[Depends(require_workspace_member)],
 )
 async def list_category_rules(
     workspace_id: UUID,
@@ -71,6 +73,7 @@ async def list_category_rules(
     "/workspaces/{workspace_id}/category-rules",
     response_model=CategoryRuleRead,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_workspace_writer)],
 )
 async def create_category_rule(
     workspace_id: UUID,
@@ -121,6 +124,7 @@ async def create_category_rule(
 @router.patch(
     "/workspaces/{workspace_id}/category-rules/{rule_id}",
     response_model=CategoryRuleRead,
+    dependencies=[Depends(require_workspace_writer)],
 )
 async def update_category_rule(
     workspace_id: UUID,
@@ -172,6 +176,7 @@ async def update_category_rule(
 @router.post(
     "/workspaces/{workspace_id}/category-rules/apply",
     response_model=CategoryRuleApplyResult,
+    dependencies=[Depends(require_workspace_writer)],
 )
 async def apply_category_rules(
     workspace_id: UUID,

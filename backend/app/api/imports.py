@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.auth import require_workspace_member, require_workspace_writer
 from app.db.session import get_db_session
 from app.models import (
     Account,
@@ -138,6 +139,7 @@ def _storage_key(workspace_id: UUID, sha256: str, filename: str) -> str:
     "/upload",
     response_model=ImportBatchRead,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_workspace_writer)],
 )
 async def upload_csv_import(
     workspace_id: UUID,
@@ -200,14 +202,22 @@ async def upload_csv_import(
     return batch
 
 
-@router.get("/{import_batch_id}", response_model=ImportBatchRead)
+@router.get(
+    "/{import_batch_id}",
+    response_model=ImportBatchRead,
+    dependencies=[Depends(require_workspace_member)],
+)
 async def get_import_batch(
     workspace_id: UUID, import_batch_id: UUID, session: SessionDep
 ) -> ImportBatch:
     return await _get_import_batch(session, workspace_id, import_batch_id)
 
 
-@router.get("/{import_batch_id}/rows", response_model=list[ImportRowRead])
+@router.get(
+    "/{import_batch_id}/rows",
+    response_model=list[ImportRowRead],
+    dependencies=[Depends(require_workspace_member)],
+)
 async def list_import_rows(
     workspace_id: UUID,
     import_batch_id: UUID,
@@ -337,7 +347,11 @@ async def _find_existing_transaction(
     return result.scalar_one_or_none()
 
 
-@router.post("/{import_batch_id}/confirm", response_model=ImportConfirmResult)
+@router.post(
+    "/{import_batch_id}/confirm",
+    response_model=ImportConfirmResult,
+    dependencies=[Depends(require_workspace_writer)],
+)
 async def confirm_import_batch(
     workspace_id: UUID, import_batch_id: UUID, session: SessionDep
 ) -> ImportConfirmResult:

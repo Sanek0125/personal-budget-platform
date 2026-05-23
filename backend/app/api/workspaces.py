@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.auth import CurrentUserDep, get_current_user_id
 from app.db.session import get_db_session
 from app.models.currency import Currency
 from app.models.user import User
@@ -18,7 +19,7 @@ SessionDep = Annotated[AsyncSession, Depends(get_db_session)]
 
 @router.get("", response_model=list[WorkspaceRead])
 async def list_workspaces(
-    user_id: UUID,
+    user_id: CurrentUserDep,
     session: SessionDep,
 ) -> list[Workspace]:
     result = await session.execute(
@@ -33,7 +34,7 @@ async def list_workspaces(
 @router.get("/{workspace_id}", response_model=WorkspaceRead)
 async def get_workspace(
     workspace_id: UUID,
-    user_id: UUID,
+    user_id: CurrentUserDep,
     session: SessionDep,
 ) -> Workspace:
     result = await session.execute(
@@ -53,7 +54,12 @@ async def get_workspace(
     return workspace
 
 
-@router.post("", response_model=WorkspaceRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=WorkspaceRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(get_current_user_id)],
+)
 async def create_workspace(
     payload: WorkspaceCreate,
     session: SessionDep,
@@ -99,7 +105,7 @@ async def create_workspace(
 @router.get("/{workspace_id}/members", response_model=list[WorkspaceMemberRead])
 async def list_workspace_members(
     workspace_id: UUID,
-    user_id: UUID,
+    user_id: CurrentUserDep,
     session: SessionDep,
 ) -> list[WorkspaceMember]:
     workspace = await session.execute(

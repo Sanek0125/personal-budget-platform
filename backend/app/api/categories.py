@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.auth import require_workspace_member, require_workspace_writer
 from app.db.session import get_db_session
 from app.models.category import Category
 from app.models.workspace import Workspace
@@ -29,7 +30,11 @@ _CATEGORY_AUDIT_FIELDS = [
 ]
 
 
-@router.get("", response_model=list[CategoryRead])
+@router.get(
+    "",
+    response_model=list[CategoryRead],
+    dependencies=[Depends(require_workspace_member)],
+)
 async def list_categories(
     workspace_id: UUID,
     session: SessionDep,
@@ -42,7 +47,12 @@ async def list_categories(
     return list(result.scalars().all())
 
 
-@router.post("", response_model=CategoryRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=CategoryRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_workspace_writer)],
+)
 async def create_category(
     workspace_id: UUID,
     payload: CategoryCreate,
