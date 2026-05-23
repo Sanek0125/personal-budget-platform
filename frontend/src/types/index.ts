@@ -166,6 +166,25 @@ export type TransactionCreatePayload = {
   notes?: string;
 };
 
+export type TransferCreatePayload = {
+  from_account_id: string;
+  to_account_id: string;
+  occurred_at: string;
+  from_amount: string;
+  from_currency_code: string;
+  to_amount?: string;
+  to_currency_code?: string;
+  exchange_rate?: string;
+  description: string;
+  notes?: string;
+};
+
+export type TransferRead = {
+  outflow: Transaction;
+  inflow: Transaction;
+  link_id: string;
+};
+
 export type Budget = {
   id: string;
   workspace_id: string;
