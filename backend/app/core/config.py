@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     app_name: str = "Personal Budget Backend"
     environment: str = "local"
     debug: bool = False
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     postgres_host: str = "localhost"
     postgres_port: int = 5432
@@ -37,6 +38,16 @@ class Settings(BaseSettings):
             database=self.postgres_db,
         )
         return url.render_as_string(hide_password=False)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def allowed_cors_origins(self) -> list[str]:
+        """Return normalized browser origins allowed to call the API."""
+        return [
+            origin.strip()
+            for origin in self.cors_origins.split(",")
+            if origin.strip()
+        ]
 
 
 @lru_cache

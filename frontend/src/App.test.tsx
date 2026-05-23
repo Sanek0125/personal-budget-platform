@@ -570,6 +570,126 @@ describe("App shell", () => {
     );
   });
 
+  it("lists budgets for the active workspace", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "99999999-9999-9999-9999-999999999999",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "May 2026 Budget",
+              period_type: "monthly",
+              period_start: "2026-05-01",
+              period_end: "2026-05-31",
+              currency_code: "RUB",
+              is_active: true,
+              created_at: null,
+              updated_at: null,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("link", { name: /budgets/i }));
+
+    expect(await screen.findByRole("heading", { name: /budgets/i })).toBeInTheDocument();
+    expect(await screen.findByText("May 2026 Budget")).toBeInTheDocument();
+    expect(screen.getByText(/monthly · 2026-05-01 → 2026-05-31/i)).toBeInTheDocument();
+    expect(screen.getByText(/RUB · active/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/budgets",
+      expect.objectContaining({
+        headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
+      }),
+    );
+  });
+
+  it("creates a budget in the active workspace", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }))
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "99999999-9999-9999-9999-999999999999",
+            workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            name: "June 2026 Budget",
+            period_type: "monthly",
+            period_start: "2026-06-01",
+            period_end: "2026-06-30",
+            currency_code: "USD",
+            is_active: true,
+            created_at: null,
+            updated_at: null,
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("link", { name: /budgets/i }));
+    await user.type(await screen.findByLabelText(/budget name/i), " June 2026 Budget ");
+    await user.type(screen.getByLabelText(/period start/i), "2026-06-01");
+    await user.type(screen.getByLabelText(/period end/i), "2026-06-30");
+    await user.clear(screen.getByLabelText(/budget currency/i));
+    await user.type(screen.getByLabelText(/budget currency/i), "usd");
+    await user.click(screen.getByRole("button", { name: /create budget/i }));
+
+    expect(await screen.findByText(/created budget June 2026 Budget/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/budgets",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          name: "June 2026 Budget",
+          period_type: "monthly",
+          period_start: "2026-06-01",
+          period_end: "2026-06-30",
+          currency_code: "USD",
+          is_active: true,
+        }),
+      }),
+    );
+  });
+
   it("creates a development user from settings", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
