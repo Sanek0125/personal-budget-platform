@@ -26,10 +26,11 @@ class CsvImportUpload(BaseModel):
 
     @field_validator("original_filename")
     @classmethod
-    def require_csv_filename(cls, value: str) -> str:
+    def require_supported_filename(cls, value: str) -> str:
         value = value.strip()
-        if not value.lower().endswith(".csv"):
-            raise ValueError("CSV imports require a .csv filename")
+        lowered = value.lower()
+        if not lowered.endswith((".csv", ".pdf", ".txt")):
+            raise ValueError("Imports require a .csv, .pdf, or .txt filename")
         return value
 
     @field_validator("parser_name")

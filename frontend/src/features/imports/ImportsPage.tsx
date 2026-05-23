@@ -89,7 +89,7 @@ export function ImportsPage({ activeWorkspace, currentUser }: { activeWorkspace?
     <section className="page-card imports-page">
       <p className="eyebrow">MVP module</p>
       <h2>Imports</h2>
-      <p>Upload CSV statements, preview normalized rows, and confirm them into transactions.</p>
+      <p>Upload CSV statements or parsed bank PDF statement text, preview normalized rows, and confirm them into transactions.</p>
 
       <div className="settings-grid">
         <form className="settings-panel" onSubmit={handleUploadImport}>
