@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     environment: str = "local"
     debug: bool = False
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    auth_secret_key: str = "local-development-auth-secret-change-me"
 
     postgres_host: str = "localhost"
     postgres_port: int = 5432

@@ -31,12 +31,16 @@ class _FakeAsyncSession:
         return _Result(self.value)
 
 
-def test_current_user_id_requires_header() -> None:
+async def test_current_user_id_requires_credentials() -> None:
     with pytest.raises(HTTPException) as exc_info:
-        get_current_user_id(None)
+        await get_current_user_id(
+            authorization=None,
+            x_user_id=None,
+            session=_FakeAsyncSession(),  # type: ignore[arg-type]
+        )
 
     assert exc_info.value.status_code == 401
-    assert exc_info.value.detail == "Missing X-User-Id header"
+    assert exc_info.value.detail == "Not authenticated"
 
 
 async def test_require_workspace_member_returns_membership() -> None:
@@ -85,10 +89,10 @@ async def test_require_workspace_writer_rejects_viewer() -> None:
     assert exc_info.value.detail == "Workspace write permission required"
 
 
-def test_workspace_scoped_routes_require_dev_auth_header() -> None:
+def test_workspace_scoped_routes_require_authentication() -> None:
     client = TestClient(app)
 
     response = client.get(f"/workspaces/{uuid4()}/accounts")
 
     assert response.status_code == 401
-    assert response.json() == {"detail": "Missing X-User-Id header"}
+    assert response.json() == {"detail": "Not authenticated"}
