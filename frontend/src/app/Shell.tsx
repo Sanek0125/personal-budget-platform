@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, Route, Routes } from "react-router-dom";
 
+import { FirstWorkspaceOnboarding } from "../components/FirstWorkspaceOnboarding";
 import { WorkspaceCard } from "../components/WorkspaceCard";
 import { AccountsPage } from "../features/accounts/AccountsPage";
 import { BudgetsPage } from "../features/budgets/BudgetsPage";
@@ -14,7 +16,8 @@ import { NotFoundPage } from "../pages/NotFoundPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { navigationItems } from "../routes/navigation";
 import { useAuth } from "./authContext";
-import { useWorkspaces } from "./useWorkspaces";
+import { useWorkspaces, WORKSPACES_QUERY_KEY } from "./useWorkspaces";
+import type { Workspace } from "../types";
 
 const ACTIVE_WORKSPACE_STORAGE_KEY = "personal-budget.active-workspace-id";
 
@@ -28,14 +31,21 @@ function storeWorkspaceId(workspaceId: string) {
 
 export function Shell() {
   const { currentUser, logout } = useAuth();
+  const queryClient = useQueryClient();
   const workspacesQuery = useWorkspaces();
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(readStoredWorkspaceId);
   const activeWorkspace =
     workspacesQuery.data?.find((workspace) => workspace.id === selectedWorkspaceId) ?? workspacesQuery.data?.[0];
+  const shouldShowWorkspaceOnboarding = workspacesQuery.isSuccess && workspacesQuery.data.length === 0;
 
   function handleWorkspaceChange(workspaceId: string) {
     setSelectedWorkspaceId(workspaceId);
     storeWorkspaceId(workspaceId);
+  }
+
+  function handleWorkspaceCreated(workspace: Workspace) {
+    queryClient.setQueryData<Workspace[]>(WORKSPACES_QUERY_KEY, (workspaces = []) => [...workspaces, workspace]);
+    handleWorkspaceChange(workspace.id);
   }
 
   return (
@@ -63,28 +73,34 @@ export function Shell() {
           onWorkspaceChange={handleWorkspaceChange}
         />
 
-        <nav className="nav-list">
-          {navigationItems.map((item) => (
-            <Link key={item.path} to={item.path}>
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+        {shouldShowWorkspaceOnboarding ? null : (
+          <nav className="nav-list">
+            {navigationItems.map((item) => (
+              <Link key={item.path} to={item.path}>
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+        )}
       </aside>
 
       <main className="content">
-        <Routes>
-          <Route index element={<DashboardPage activeWorkspace={activeWorkspace} />} />
-          <Route path="transactions" element={<TransactionsPage activeWorkspace={activeWorkspace} />} />
-          <Route path="accounts" element={<AccountsPage activeWorkspace={activeWorkspace} />} />
-          <Route path="categories" element={<CategoriesPage activeWorkspace={activeWorkspace} />} />
-          <Route path="imports" element={<ImportsPage activeWorkspace={activeWorkspace} currentUser={currentUser!} />} />
-          <Route path="budgets" element={<BudgetsPage activeWorkspace={activeWorkspace} />} />
-          <Route path="debts" element={<DebtsPage activeWorkspace={activeWorkspace} />} />
-          <Route path="rewards" element={<RewardsPage activeWorkspace={activeWorkspace} />} />
-          <Route path="settings" element={<SettingsPage activeWorkspace={activeWorkspace} />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+        {shouldShowWorkspaceOnboarding && currentUser ? (
+          <FirstWorkspaceOnboarding currentUser={currentUser} onWorkspaceCreated={handleWorkspaceCreated} />
+        ) : (
+          <Routes>
+            <Route index element={<DashboardPage activeWorkspace={activeWorkspace} />} />
+            <Route path="transactions" element={<TransactionsPage activeWorkspace={activeWorkspace} />} />
+            <Route path="accounts" element={<AccountsPage activeWorkspace={activeWorkspace} />} />
+            <Route path="categories" element={<CategoriesPage activeWorkspace={activeWorkspace} />} />
+            <Route path="imports" element={<ImportsPage activeWorkspace={activeWorkspace} currentUser={currentUser!} />} />
+            <Route path="budgets" element={<BudgetsPage activeWorkspace={activeWorkspace} />} />
+            <Route path="debts" element={<DebtsPage activeWorkspace={activeWorkspace} />} />
+            <Route path="rewards" element={<RewardsPage activeWorkspace={activeWorkspace} />} />
+            <Route path="settings" element={<SettingsPage activeWorkspace={activeWorkspace} />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        )}
       </main>
     </div>
   );
