@@ -115,7 +115,7 @@ describe("App shell", () => {
     await user.type(screen.getByLabelText(/password/i), "secret-password");
     await user.click(screen.getByRole("button", { name: /^create account$/i }));
 
-    expect(await screen.findByText(/select a workspace/i)).toBeInTheDocument();
+    expect(await screen.findByText(/create your first workspace/i)).toBeInTheDocument();
     expect(localStorage.getItem("personal-budget.auth-token")).toBe(TEST_TOKEN);
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -136,8 +136,72 @@ describe("App shell", () => {
     );
   });
 
+  it("creates the first workspace from the onboarding screen", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+            name: "Studio Budget",
+            kind: "personal",
+            base_currency_code: "USD",
+            owner_user_id: TEST_USER.id,
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: /create your first workspace/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /transactions/i })).not.toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText(/workspace name/i));
+    await user.type(screen.getByLabelText(/workspace name/i), " Studio Budget ");
+    await user.selectOptions(screen.getByLabelText(/workspace type/i), "personal");
+    await user.clear(screen.getByLabelText(/base currency/i));
+    await user.type(screen.getByLabelText(/base currency/i), " usd ");
+    await user.click(screen.getByRole("button", { name: /create workspace/i }));
+
+    expect(await screen.findByText("Studio Budget")).toBeInTheDocument();
+    expect(screen.getByText(/personal · usd/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /transactions/i })).toHaveAttribute("href", "/transactions");
+    expect(localStorage.getItem("personal-budget.active-workspace-id")).toBe("cccccccc-cccc-cccc-cccc-cccccccccccc");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/workspaces",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ Authorization: `Bearer ${TEST_TOKEN}` }),
+        body: JSON.stringify({
+          name: "Studio Budget",
+          kind: "personal",
+          base_currency_code: "USD",
+          owner_user_id: TEST_USER.id,
+        }),
+      }),
+    );
+  });
+
   it("renders the dashboard layout with core personal-budget navigation", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(authMeResponse()).mockResolvedValueOnce(new Response("[]", { status: 200 }));
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(authMeResponse()).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          {
+            id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            name: "Family Budget",
+            kind: "family",
+            base_currency_code: "RUB",
+            owner_user_id: TEST_USER.id,
+          },
+        ]),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
 
     render(<App />);
 
@@ -149,7 +213,7 @@ describe("App shell", () => {
     expect(await screen.findByRole("link", { name: /budgets/i })).toHaveAttribute("href", "/budgets");
     expect(await screen.findByRole("link", { name: /debts/i })).toHaveAttribute("href", "/debts");
     expect(await screen.findByRole("link", { name: /rewards/i })).toHaveAttribute("href", "/rewards");
-    expect((await screen.findAllByText(/select a workspace/i)).length).toBeGreaterThan(0);
+    expect(await screen.findByText("Family Budget")).toBeInTheDocument();
   });
 
   it("loads workspaces for the development user and shows the active workspace", async () => {
@@ -1728,7 +1792,20 @@ describe("App shell", () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(authMeResponse())
-      .mockResolvedValueOnce(new Response("[]", { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: TEST_USER.id,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
