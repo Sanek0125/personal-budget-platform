@@ -908,6 +908,205 @@ describe("App shell", () => {
     );
   });
 
+  it("lists debts and the workspace debt summary", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              contact_id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+              direction: "they_owe_me",
+              status: "open",
+              principal_amount: "5000.00",
+              currency_code: "RUB",
+              description: "Loan to Ivan",
+              due_date: "2026-06-15",
+              source_transaction_id: null,
+              opened_at: "2026-05-20T10:00:00Z",
+              closed_at: null,
+              created_at: null,
+              updated_at: null,
+              payments: [],
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            totals: [
+              {
+                direction: "they_owe_me",
+                currency_code: "RUB",
+                principal_amount: "5000.00",
+                paid_amount: "0.00",
+                remaining_amount: "5000.00",
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("link", { name: /debts/i }));
+
+    expect(await screen.findByRole("heading", { name: /debts/i })).toBeInTheDocument();
+    expect(await screen.findByText("Loan to Ivan")).toBeInTheDocument();
+    expect(screen.getByText(/they_owe_me · 5000.00 RUB · open/i)).toBeInTheDocument();
+    expect(screen.getByText(/remaining: 5000.00 RUB/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/debts",
+      expect.objectContaining({
+        headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/debts/summary",
+      expect.objectContaining({
+        headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
+      }),
+    );
+  });
+
+  it("creates a debt with a new contact in the active workspace", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", totals: [] }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+            workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            contact_id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+            direction: "i_owe_them",
+            status: "open",
+            principal_amount: "1200.00",
+            currency_code: "USD",
+            description: "Borrowed for dinner",
+            due_date: "2026-06-30",
+            source_transaction_id: null,
+            opened_at: "2026-05-20T10:00:00Z",
+            closed_at: null,
+            created_at: null,
+            updated_at: null,
+            payments: [],
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              contact_id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+              direction: "i_owe_them",
+              status: "open",
+              principal_amount: "1200.00",
+              currency_code: "USD",
+              description: "Borrowed for dinner",
+              due_date: "2026-06-30",
+              source_transaction_id: null,
+              opened_at: "2026-05-20T10:00:00Z",
+              closed_at: null,
+              created_at: null,
+              updated_at: null,
+              payments: [],
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            totals: [
+              {
+                direction: "i_owe_them",
+                currency_code: "USD",
+                principal_amount: "1200.00",
+                paid_amount: "0.00",
+                remaining_amount: "1200.00",
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("link", { name: /debts/i }));
+    await user.type(await screen.findByLabelText(/contact name/i), " Ivan ");
+    await user.selectOptions(screen.getByLabelText(/debt direction/i), "i_owe_them");
+    await user.type(screen.getByLabelText(/principal amount/i), "1200.00");
+    await user.clear(screen.getByLabelText(/debt currency/i));
+    await user.type(screen.getByLabelText(/debt currency/i), "usd");
+    await user.type(screen.getByLabelText(/debt description/i), " Borrowed for dinner ");
+    await user.type(screen.getByLabelText(/due date/i), "2026-06-30");
+    await user.click(screen.getByRole("button", { name: /create debt/i }));
+
+    expect(await screen.findByText(/created debt Borrowed for dinner/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/debts",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          contact_name: "Ivan",
+          direction: "i_owe_them",
+          principal_amount: "1200.00",
+          currency_code: "USD",
+          description: "Borrowed for dinner",
+          due_date: "2026-06-30",
+        }),
+      }),
+    );
+  });
+
   it("creates a development user from settings", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
