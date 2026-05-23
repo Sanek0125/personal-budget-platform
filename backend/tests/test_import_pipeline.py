@@ -16,6 +16,7 @@ from app.db.base import Base
 from app.models import Account, File, ImportBatch, ImportRow, Transaction
 from app.schemas.imports import CsvImportUpload
 from app.services.csv_imports import CsvColumnMapping, parse_csv_rows
+from app.services.import_parsers import parse_import_rows
 
 
 class _ScalarResult:
@@ -202,6 +203,77 @@ def test_parse_csv_rows_normalizes_rows_and_hashes() -> None:
     assert rows[0].normalized_data["amount"] == "-12.34"
     assert rows[0].raw_hash
     assert rows[0].normalized_hash
+
+
+def test_parse_freedom_rows_normalizes_semicolon_statement() -> None:
+    content = (
+        "Дата операции;Дата обработки;Описание;Сумма;Валюта;ID операции\n"
+        "23.05.2026 14:35;24.05.2026;MAGNUM;−1 234,56;KZT;freedom-1\n"
+    )
+
+    rows = parse_import_rows(content, parser_name="freedom", column_mapping=None)
+
+    assert len(rows) == 1
+    assert rows[0].row_number == 1
+    assert rows[0].raw_data["Описание"] == "MAGNUM"
+    assert rows[0].normalized_data == {
+        "type": "expense",
+        "occurred_at": "2026-05-23T14:35:00+00:00",
+        "amount": "-1234.56",
+        "currency_code": "KZT",
+        "description": "MAGNUM",
+        "booked_at": "2026-05-24T00:00:00+00:00",
+        "merchant_raw": "MAGNUM",
+        "external_id": "freedom-1",
+    }
+    assert rows[0].raw_hash
+    assert rows[0].normalized_hash
+
+
+def test_parse_freedom_rows_uses_debit_credit_columns() -> None:
+    content = (
+        "Date,Description,Debit,Credit,Currency,Transaction ID\n"
+        "2026-05-23,Salary,,5000.00,USD,income-1\n"
+        "2026-05-24,Coffee,4.50,,USD,expense-1\n"
+    )
+
+    rows = parse_import_rows(content, parser_name="freedom", column_mapping=None)
+
+    assert rows[0].normalized_data["type"] == "income"
+    assert rows[0].normalized_data["amount"] == "5000.00"
+    assert rows[1].normalized_data["type"] == "expense"
+    assert rows[1].normalized_data["amount"] == "-4.50"
+
+
+async def test_upload_freedom_import_creates_file_batch_and_rows_without_mapping(
+) -> None:
+    workspace_id = uuid4()
+    account = _account(workspace_id)
+    user_id = uuid4()
+    session = _FakeAsyncSession(workspace_id, account, user_id)
+
+    batch = await upload_csv_import(
+        workspace_id,
+        CsvImportUpload(
+            user_id=user_id,
+            account_id=account.id,
+            original_filename="freedom.csv",
+            content=(
+                "Дата операции;Описание;Сумма;Валюта\n"
+                "23.05.2026;MAGNUM;-1234,56;USD\n"
+            ),
+            parser_name="freedom",
+            source_name="Freedom Bank",
+        ),
+        session,  # type: ignore[arg-type]
+    )
+
+    rows = [obj for obj in session.added_all if isinstance(obj, ImportRow)]
+    assert batch.parser_version == "freedom-v1"
+    assert batch.source_name == "Freedom Bank"
+    assert batch.total_rows == 1
+    assert rows[0].normalized_data["description"] == "MAGNUM"
+    assert rows[0].normalized_data["amount"] == "-1234.56"
 
 
 async def test_upload_csv_import_creates_file_batch_and_rows() -> None:

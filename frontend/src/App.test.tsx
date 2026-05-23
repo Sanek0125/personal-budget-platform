@@ -1878,12 +1878,133 @@ describe("App shell", () => {
           original_filename: "statement.csv",
           content: "Date,Amount,Currency,Description\n2026-05-21,-12.34,rub,Lunch",
           source_name: "T-Bank",
+          parser_name: "generic_csv",
           column_mapping: {
             occurred_at: "Date",
             amount: "Amount",
             currency_code: "Currency",
             description: "Description",
           },
+        }),
+      }),
+    );
+  });
+
+  it("uploads a Freedom import with the bank parser", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "44444444-4444-4444-4444-444444444444",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              owner_user_id: null,
+              name: "Freedom card",
+              type: "bank_card",
+              currency_code: "KZT",
+              institution_name: "Freedom Bank",
+              masked_number: "*7777",
+              opening_balance: "0.00",
+              is_active: true,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            user_id: "00000000-0000-0000-0000-000000000001",
+            account_id: "44444444-4444-4444-4444-444444444444",
+            file_id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+            source_type: "csv",
+            source_name: "Freedom Bank",
+            original_filename: "freedom.csv",
+            file_hash: "hash-1",
+            file_size: 72,
+            status: "parsed",
+            total_rows: 1,
+            imported_count: 0,
+            duplicate_count: 0,
+            error_count: 0,
+            parser_version: "freedom-v1",
+            uploaded_at: null,
+            processed_at: null,
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+              import_batch_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              row_number: 1,
+              raw_data: { "Дата операции": "23.05.2026", Описание: "MAGNUM", Сумма: "-1234,56", Валюта: "KZT" },
+              normalized_data: {
+                type: "expense",
+                occurred_at: "2026-05-23T00:00:00+00:00",
+                amount: "-1234.56",
+                currency_code: "KZT",
+                description: "MAGNUM",
+              },
+              raw_hash: "raw-hash",
+              normalized_hash: "normalized-hash",
+              status: "pending",
+              error_message: null,
+              transaction_id: null,
+              created_at: null,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: /imports/i }));
+    await user.selectOptions(await screen.findByLabelText(/target account/i), "44444444-4444-4444-4444-444444444444");
+    await user.selectOptions(screen.getByLabelText(/parser/i), "freedom");
+    await user.type(screen.getByLabelText(/original filename/i), "freedom.csv");
+    await user.type(
+      screen.getByLabelText(/csv content/i),
+      "Дата операции;Описание;Сумма;Валюта{enter}23.05.2026;MAGNUM;-1234,56;KZT",
+    );
+    await user.click(screen.getByRole("button", { name: /upload import/i }));
+
+    expect(await screen.findByText(/uploaded import freedom.csv/i)).toBeInTheDocument();
+    expect(await screen.findByText("MAGNUM")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/imports/upload",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          user_id: "00000000-0000-0000-0000-000000000001",
+          account_id: "44444444-4444-4444-4444-444444444444",
+          original_filename: "freedom.csv",
+          content: "Дата операции;Описание;Сумма;Валюта\n23.05.2026;MAGNUM;-1234,56;KZT",
+          source_name: "Freedom Bank",
+          parser_name: "freedom",
         }),
       }),
     );

@@ -26,7 +26,8 @@ from app.schemas.imports import (
     ImportConfirmResult,
     ImportRowRead,
 )
-from app.services.csv_imports import file_sha256, parse_csv_rows
+from app.services.csv_imports import file_sha256
+from app.services.import_parsers import parse_import_rows, parser_version
 from app.services.transaction_fingerprints import build_transaction_fingerprint
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/imports", tags=["imports"])
@@ -150,7 +151,11 @@ async def upload_csv_import(
     account = await _get_workspace_account(session, workspace_id, payload.account_id)
     await _ensure_workspace_member(session, workspace_id, payload.user_id)
 
-    parsed_rows = parse_csv_rows(payload.content, payload.column_mapping)
+    parsed_rows = parse_import_rows(
+        payload.content,
+        parser_name=payload.parser_name,
+        column_mapping=payload.column_mapping,
+    )
     digest = file_sha256(payload.content)
     uploaded_file = File(
         id=uuid4(),
@@ -175,7 +180,7 @@ async def upload_csv_import(
         file_size=uploaded_file.size_bytes,
         status="parsed",
         total_rows=len(parsed_rows),
-        parser_version="csv-v1",
+        parser_version=parser_version(payload.parser_name),
     )
     rows = [
         ImportRow(

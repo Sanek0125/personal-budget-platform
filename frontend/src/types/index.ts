@@ -314,7 +314,8 @@ export type CsvImportUploadPayload = {
   original_filename: string;
   content: string;
   source_name?: string;
-  column_mapping: {
+  parser_name?: "generic_csv" | "freedom";
+  column_mapping?: {
     occurred_at: string;
     amount: string;
     currency_code: string;
