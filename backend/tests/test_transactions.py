@@ -15,7 +15,14 @@ from app.api.transactions import (
     update_transaction,
 )
 from app.db.base import Base
-from app.models import Account, Category, Transaction, TransactionLink, TransactionSplit
+from app.models import (
+    Account,
+    AuditLog,
+    Category,
+    Transaction,
+    TransactionLink,
+    TransactionSplit,
+)
 from app.schemas.transaction import (
     TransactionCreate,
     TransactionSplitCreate,
@@ -290,7 +297,8 @@ async def test_create_expense_transaction_creates_posted_manual_transaction() ->
         session,  # type: ignore[arg-type]
     )
 
-    assert session.added == [transaction]
+    assert transaction in session.added
+    assert any(isinstance(obj, AuditLog) for obj in session.added)
     assert session.flushed is True
     assert session.committed is True
     assert session.refreshed == [transaction]

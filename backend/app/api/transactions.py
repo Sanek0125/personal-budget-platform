@@ -23,6 +23,11 @@ from app.schemas.transaction import (
     TransferCreate,
     TransferRead,
 )
+from app.services.audit import (
+    audit_snapshot,
+    ensure_audit_entity_id,
+    record_audit_event,
+)
 from app.services.transaction_fingerprints import build_transaction_fingerprint
 
 router = APIRouter(
@@ -38,6 +43,26 @@ def _now() -> datetime:
 # Partial unique index guarding against duplicate active transactions; defined
 # in app/models/transaction.py.
 _FINGERPRINT_INDEX = "uq_transactions_active_fingerprint"
+_TRANSACTION_AUDIT_FIELDS = [
+    "account_id",
+    "type",
+    "status",
+    "occurred_at",
+    "booked_at",
+    "amount",
+    "currency_code",
+    "base_amount",
+    "base_currency_code",
+    "description",
+    "merchant_name",
+    "category_id",
+    "categorized_by",
+    "notes",
+    "source",
+    "external_id",
+    "fingerprint",
+    "deleted_at",
+]
 
 
 def _integrity_conflict(exc: IntegrityError) -> HTTPException:
@@ -259,6 +284,15 @@ async def create_transaction(
             rows = _split_rows(transaction, payload.splits)
             session.add_all(rows)
             transaction.splits = rows
+        record_audit_event(
+            session,
+            workspace_id=workspace_id,
+            user_id=None,
+            entity_type="transaction",
+            entity_id=ensure_audit_entity_id(transaction),
+            action="create",
+            new_data=audit_snapshot(transaction, _TRANSACTION_AUDIT_FIELDS),
+        )
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
@@ -307,6 +341,7 @@ async def update_transaction(
     session: SessionDep,
 ) -> Transaction:
     transaction = await _get_active_transaction(session, workspace_id, transaction_id)
+    old_data = audit_snapshot(transaction, _TRANSACTION_AUDIT_FIELDS)
     if transaction.type == "transfer":
         raise HTTPException(
             status_code=422,
@@ -360,6 +395,16 @@ async def update_transaction(
         )
 
     _set_fingerprint(transaction)
+    record_audit_event(
+        session,
+        workspace_id=workspace_id,
+        user_id=None,
+        entity_type="transaction",
+        entity_id=transaction.id,
+        action="update",
+        old_data=old_data,
+        new_data=audit_snapshot(transaction, _TRANSACTION_AUDIT_FIELDS),
+    )
     try:
         await session.commit()
     except IntegrityError as exc:
@@ -407,8 +452,19 @@ async def delete_transaction(
 
     now = _now()
     for row in to_delete:
+        old_data = audit_snapshot(row, _TRANSACTION_AUDIT_FIELDS)
         row.status = "deleted"
         row.deleted_at = now
+        record_audit_event(
+            session,
+            workspace_id=workspace_id,
+            user_id=None,
+            entity_type="transaction",
+            entity_id=ensure_audit_entity_id(row),
+            action="delete",
+            old_data=old_data,
+            new_data=audit_snapshot(row, _TRANSACTION_AUDIT_FIELDS),
+        )
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -499,6 +555,16 @@ async def create_transfer(
         relation_type="transfer_pair",
     )
     session.add_all([outflow, inflow, link])
+    for row in (outflow, inflow):
+        record_audit_event(
+            session,
+            workspace_id=workspace_id,
+            user_id=None,
+            entity_type="transaction",
+            entity_id=ensure_audit_entity_id(row),
+            action="create",
+            new_data=audit_snapshot(row, _TRANSACTION_AUDIT_FIELDS),
+        )
     try:
         await session.commit()
     except IntegrityError as exc:

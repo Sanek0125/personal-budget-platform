@@ -13,7 +13,14 @@ from app.api.budgets import (
     list_budgets,
 )
 from app.db.base import Base
-from app.models import Budget, BudgetLimit, Category, Transaction, TransactionSplit
+from app.models import (
+    AuditLog,
+    Budget,
+    BudgetLimit,
+    Category,
+    Transaction,
+    TransactionSplit,
+)
 from app.schemas.budget import BudgetCreate, BudgetLimitCreate
 from app.services.budgets import calculate_budget_progress
 
@@ -315,7 +322,8 @@ async def test_create_budget_persists_budget() -> None:
     assert isinstance(result, Budget)
     assert result.workspace_id == workspace_id
     assert result.currency_code == "USD"
-    assert session.added == [result]
+    assert result in session.added
+    assert any(isinstance(obj, AuditLog) for obj in session.added)
     assert session.committed is True
     assert session.refreshed == [result]
 
@@ -356,7 +364,8 @@ async def test_create_budget_limit_persists_limit() -> None:
     assert isinstance(result, BudgetLimit)
     assert result.budget_id == budget.id
     assert result.category_id == category_id
-    assert session.added == [result]
+    assert result in session.added
+    assert any(isinstance(obj, AuditLog) for obj in session.added)
     assert session.committed is True
 
 

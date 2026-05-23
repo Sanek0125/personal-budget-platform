@@ -16,10 +16,27 @@ from app.schemas.category_rule import (
     CategoryRuleRead,
     CategoryRuleUpdate,
 )
+from app.services.audit import (
+    audit_snapshot,
+    ensure_audit_entity_id,
+    record_audit_event,
+)
 from app.services.category_rules import find_matching_rule, validate_rule_definition
 
 router = APIRouter(tags=["category-rules"])
 SessionDep = Annotated[AsyncSession, Depends(get_db_session)]
+_RULE_AUDIT_FIELDS = [
+    "category_id",
+    "name",
+    "operator",
+    "match_field",
+    "pattern",
+    "amount_min",
+    "amount_max",
+    "priority",
+    "is_active",
+]
+_TRANSACTION_CATEGORY_AUDIT_FIELDS = ["category_id", "categorized_by"]
 
 
 async def _ensure_workspace_exists(
@@ -87,6 +104,15 @@ async def create_category_rule(
         is_active=payload.is_active,
     )
     session.add(rule)
+    record_audit_event(
+        session,
+        workspace_id=workspace_id,
+        user_id=None,
+        entity_type="category_rule",
+        entity_id=ensure_audit_entity_id(rule),
+        action="create",
+        new_data=audit_snapshot(rule, _RULE_AUDIT_FIELDS),
+    )
     await session.commit()
     await session.refresh(rule)
     return rule
@@ -116,6 +142,7 @@ async def update_category_rule(
             status_code=status.HTTP_404_NOT_FOUND, detail="Category rule not found"
         )
 
+    old_data = audit_snapshot(rule, _RULE_AUDIT_FIELDS)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(rule, field, value)
 
@@ -127,6 +154,16 @@ async def update_category_rule(
         await session.rollback()
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    record_audit_event(
+        session,
+        workspace_id=workspace_id,
+        user_id=None,
+        entity_type="category_rule",
+        entity_id=rule.id,
+        action="update",
+        old_data=old_data,
+        new_data=audit_snapshot(rule, _RULE_AUDIT_FIELDS),
+    )
     await session.commit()
     await session.refresh(rule)
     return rule
@@ -180,6 +217,7 @@ async def apply_category_rules(
         rule = find_matching_rule(rules, transaction)
         if rule is None:
             continue
+        old_data = audit_snapshot(transaction, _TRANSACTION_CATEGORY_AUDIT_FIELDS)
         transaction.category_id = rule.category_id
         transaction.categorized_by = "rule"
         if (rule.id, transaction.id) not in existing_matches:
@@ -192,6 +230,16 @@ async def apply_category_rules(
                     matched_value=getattr(transaction, rule.match_field, None),
                 )
             )
+        record_audit_event(
+            session,
+            workspace_id=workspace_id,
+            user_id=None,
+            entity_type="transaction",
+            entity_id=transaction.id,
+            action="categorize",
+            old_data=old_data,
+            new_data=audit_snapshot(transaction, _TRANSACTION_CATEGORY_AUDIT_FIELDS),
+        )
         categorized_ids.append(transaction.id)
 
     await session.commit()
