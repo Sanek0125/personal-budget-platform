@@ -64,6 +64,8 @@ VITE_API_BASE_URL=/api
 VITE_DEV_USER_ID=<user-uuid>
 ```
 
+The shell loads all workspaces available to the development user and lets you choose the active workspace from the sidebar. The selected workspace id is saved in browser `localStorage`, and every workspace-scoped page uses that selection when building `/workspaces/{workspace_id}/...` API calls.
+
 The Dashboard page replaces the final core placeholder with a workspace overview assembled from existing MVP APIs:
 
 - load accounts, transactions, budgets, debt summary, and reward events for the active workspace;
