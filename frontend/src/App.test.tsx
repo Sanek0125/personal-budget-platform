@@ -7,6 +7,7 @@ import { App } from "./App";
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  localStorage.clear();
   window.history.pushState({}, "", "/");
 });
 
@@ -50,6 +51,55 @@ describe("App shell", () => {
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
         "/workspaces",
+        expect.objectContaining({
+          headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
+        }),
+      ),
+    );
+  });
+
+  it("lets users switch the active workspace and keeps pages scoped to that workspace", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+            {
+              id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+              name: "Personal Budget",
+              kind: "personal",
+              base_currency_code: "USD",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }));
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.selectOptions(await screen.findByLabelText(/active workspace/i), "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+
+    expect(screen.getByText(/personal · usd/i)).toBeInTheDocument();
+    expect(localStorage.getItem("personal-budget.active-workspace-id")).toBe(
+      "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+    );
+
+    await user.click(screen.getByRole("link", { name: /accounts/i }));
+
+    expect(await screen.findByRole("heading", { name: /accounts/i })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenLastCalledWith(
+        "/workspaces/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/accounts",
         expect.objectContaining({
           headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
         }),

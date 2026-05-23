@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, Route, Routes } from "react-router-dom";
 
 import { WorkspaceCard } from "../components/WorkspaceCard";
@@ -14,9 +15,26 @@ import { SettingsPage } from "../pages/SettingsPage";
 import { navigationItems } from "../routes/navigation";
 import { useWorkspaces } from "./useWorkspaces";
 
+const ACTIVE_WORKSPACE_STORAGE_KEY = "personal-budget.active-workspace-id";
+
+function readStoredWorkspaceId() {
+  return localStorage.getItem(ACTIVE_WORKSPACE_STORAGE_KEY) ?? undefined;
+}
+
+function storeWorkspaceId(workspaceId: string) {
+  localStorage.setItem(ACTIVE_WORKSPACE_STORAGE_KEY, workspaceId);
+}
+
 export function Shell() {
   const workspacesQuery = useWorkspaces();
-  const activeWorkspace = workspacesQuery.data?.[0];
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(readStoredWorkspaceId);
+  const activeWorkspace =
+    workspacesQuery.data?.find((workspace) => workspace.id === selectedWorkspaceId) ?? workspacesQuery.data?.[0];
+
+  function handleWorkspaceChange(workspaceId: string) {
+    setSelectedWorkspaceId(workspaceId);
+    storeWorkspaceId(workspaceId);
+  }
 
   return (
     <div className="app-shell">
@@ -29,7 +47,12 @@ export function Shell() {
           </div>
         </div>
 
-        <WorkspaceCard workspacesQuery={workspacesQuery} />
+        <WorkspaceCard
+          activeWorkspace={activeWorkspace}
+          selectedWorkspaceId={activeWorkspace?.id}
+          workspacesQuery={workspacesQuery}
+          onWorkspaceChange={handleWorkspaceChange}
+        />
 
         <nav className="nav-list">
           {navigationItems.map((item) => (

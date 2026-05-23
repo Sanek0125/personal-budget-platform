@@ -4,9 +4,19 @@ import type { Workspace } from "../types";
 
 type WorkspaceQuery = UseQueryResult<Workspace[], Error>;
 
-export function WorkspaceCard({ workspacesQuery }: { workspacesQuery: WorkspaceQuery }) {
-  const activeWorkspace = workspacesQuery.data?.[0];
+type WorkspaceCardProps = {
+  activeWorkspace: Workspace | undefined;
+  selectedWorkspaceId: string | undefined;
+  workspacesQuery: WorkspaceQuery;
+  onWorkspaceChange: (workspaceId: string) => void;
+};
 
+export function WorkspaceCard({
+  activeWorkspace,
+  selectedWorkspaceId,
+  workspacesQuery,
+  onWorkspaceChange,
+}: WorkspaceCardProps) {
   return (
     <div className="workspace-card">
       <span className="workspace-label">Workspace</span>
@@ -17,7 +27,16 @@ export function WorkspaceCard({ workspacesQuery }: { workspacesQuery: WorkspaceQ
         </>
       ) : activeWorkspace ? (
         <>
-          <strong>{activeWorkspace.name}</strong>
+          <label className="workspace-switcher">
+            <span>Active workspace</span>
+            <select value={selectedWorkspaceId} onChange={(event) => onWorkspaceChange(event.target.value)}>
+              {workspacesQuery.data?.map((workspace) => (
+                <option key={workspace.id} value={workspace.id}>
+                  {workspace.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <p>
             {activeWorkspace.kind} · {activeWorkspace.base_currency_code}
           </p>

@@ -94,6 +94,31 @@ a {
   font-size: 0.9rem;
 }
 
+.workspace-switcher {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.workspace-switcher span {
+  font-weight: 800;
+}
+
+.workspace-switcher select {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  background: #ffffff;
+  color: #102033;
+  font: inherit;
+}
+
+.workspace-switcher select:focus-visible {
+  border-color: #38bdf8;
+  outline: 2px solid rgba(56, 189, 248, 0.35);
+  outline-offset: 2px;
+}
+
 .nav-list {
   display: grid;
   gap: 0.35rem;
