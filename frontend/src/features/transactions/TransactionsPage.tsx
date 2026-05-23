@@ -2,7 +2,16 @@ import { type FormEvent, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiGet, apiPost } from "../../api/client";
-import type { Account, Category, ManualTransactionType, Transaction, TransactionCreatePayload, Workspace } from "../../types";
+import type {
+  Account,
+  Category,
+  ManualTransactionType,
+  Transaction,
+  TransactionCreatePayload,
+  TransferCreatePayload,
+  TransferRead,
+  Workspace,
+} from "../../types";
 import { normalizeManualAmount, toApiDateTime } from "../../utils/transactions";
 
 export function TransactionsPage({ activeWorkspace }: { activeWorkspace?: Workspace }) {
@@ -16,6 +25,13 @@ export function TransactionsPage({ activeWorkspace }: { activeWorkspace?: Worksp
   const [merchantName, setMerchantName] = useState("");
   const [notes, setNotes] = useState("");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [transferFromAccountId, setTransferFromAccountId] = useState("");
+  const [transferToAccountId, setTransferToAccountId] = useState("");
+  const [transferDescription, setTransferDescription] = useState("");
+  const [transferAmount, setTransferAmount] = useState("");
+  const [transferOccurredAt, setTransferOccurredAt] = useState("");
+  const [transferNotes, setTransferNotes] = useState("");
+  const [transferStatusMessage, setTransferStatusMessage] = useState<string | null>(null);
 
   const accountsQuery = useQuery({
     queryKey: ["accounts", activeWorkspace?.id, "transactions-form"],
@@ -36,6 +52,7 @@ export function TransactionsPage({ activeWorkspace }: { activeWorkspace?: Worksp
   const accountsById = new Map(accountsQuery.data?.map((account) => [account.id, account]));
   const categoriesById = new Map(categoriesQuery.data?.map((category) => [category.id, category]));
   const selectedAccount = accountsById.get(accountId);
+  const selectedTransferFromAccount = accountsById.get(transferFromAccountId);
 
   async function handleCreateTransaction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -76,6 +93,46 @@ export function TransactionsPage({ activeWorkspace }: { activeWorkspace?: Worksp
       await queryClient.invalidateQueries({ queryKey: ["transactions", activeWorkspace.id] });
     } catch {
       setStatusMessage("Unable to create transaction");
+    }
+  }
+
+  async function handleCreateTransfer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!activeWorkspace) {
+      setTransferStatusMessage("Select a workspace before creating transfers");
+      return;
+    }
+    if (!selectedTransferFromAccount) {
+      setTransferStatusMessage("Select a source account before creating transfers");
+      return;
+    }
+
+    setTransferStatusMessage(null);
+    const payload: TransferCreatePayload = {
+      from_account_id: selectedTransferFromAccount.id,
+      to_account_id: transferToAccountId,
+      occurred_at: toApiDateTime(transferOccurredAt),
+      from_amount: transferAmount.trim(),
+      from_currency_code: selectedTransferFromAccount.currency_code,
+      description: transferDescription.trim(),
+      ...(transferNotes.trim() ? { notes: transferNotes.trim() } : {}),
+    };
+
+    try {
+      const transfer = await apiPost<TransferRead, TransferCreatePayload>(
+        `/workspaces/${activeWorkspace.id}/transactions/transfers`,
+        payload,
+      );
+      setTransferStatusMessage(`Created transfer ${transfer.outflow.description}`);
+      setTransferFromAccountId("");
+      setTransferToAccountId("");
+      setTransferDescription("");
+      setTransferAmount("");
+      setTransferOccurredAt("");
+      setTransferNotes("");
+      await queryClient.invalidateQueries({ queryKey: ["transactions", activeWorkspace.id] });
+    } catch {
+      setTransferStatusMessage("Unable to create transfer");
     }
   }
 
@@ -151,6 +208,70 @@ export function TransactionsPage({ activeWorkspace }: { activeWorkspace?: Worksp
           </label>
           <button type="submit" disabled={!activeWorkspace || !accountsQuery.data?.length}>Create transaction</button>
           {statusMessage ? <p role="status">{statusMessage}</p> : null}
+        </form>
+
+        <form className="settings-panel" onSubmit={handleCreateTransfer}>
+          <h3>Create transfer</h3>
+          <p>Move money between two accounts in the active workspace.</p>
+          <label>
+            Source account
+            <select
+              value={transferFromAccountId}
+              onChange={(event) => setTransferFromAccountId(event.target.value)}
+              required
+            >
+              <option value="">Select source account</option>
+              {accountsQuery.data?.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name} · {account.currency_code}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Destination account
+            <select value={transferToAccountId} onChange={(event) => setTransferToAccountId(event.target.value)} required>
+              <option value="">Select destination account</option>
+              {accountsQuery.data?.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name} · {account.currency_code}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Transfer description
+            <input
+              value={transferDescription}
+              onChange={(event) => setTransferDescription(event.target.value)}
+              minLength={1}
+              required
+            />
+          </label>
+          <label>
+            Transfer amount
+            <input
+              inputMode="decimal"
+              value={transferAmount}
+              onChange={(event) => setTransferAmount(event.target.value)}
+              required
+            />
+          </label>
+          <label>
+            Transfer occurred at
+            <input
+              type="datetime-local"
+              value={transferOccurredAt}
+              onChange={(event) => setTransferOccurredAt(event.target.value)}
+              required
+            />
+          </label>
+          <label>
+            Transfer notes
+            <input value={transferNotes} onChange={(event) => setTransferNotes(event.target.value)} />
+          </label>
+          <button type="submit" disabled={!activeWorkspace || (accountsQuery.data?.length ?? 0) < 2}>Create transfer</button>
+          {transferStatusMessage ? <p role="status">{transferStatusMessage}</p> : null}
         </form>
 
         <div className="settings-panel">

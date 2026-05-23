@@ -1092,11 +1092,11 @@ describe("App shell", () => {
     render(<App />);
 
     await user.click(await screen.findByRole("link", { name: /transactions/i }));
-    await user.selectOptions(await screen.findByLabelText(/account/i), "44444444-4444-4444-4444-444444444444");
+    await user.selectOptions(await screen.findByLabelText(/^account$/i), "44444444-4444-4444-4444-444444444444");
     await user.selectOptions(screen.getByLabelText(/transaction type/i), "expense");
-    await user.type(screen.getByLabelText(/description/i), " Grocery run ");
+    await user.type(screen.getByLabelText(/^description$/i), " Grocery run ");
     await user.type(screen.getByLabelText(/^amount$/i), "1250.50");
-    await user.type(screen.getByLabelText(/occurred at/i), "2026-05-22T12:34");
+    await user.type(screen.getByLabelText(/^occurred at$/i), "2026-05-22T12:34");
     await user.selectOptions(screen.getByLabelText(/category/i), "66666666-6666-6666-6666-666666666666");
     await user.type(screen.getByLabelText(/merchant/i), " Perekrestok ");
     await user.click(screen.getByRole("button", { name: /create transaction/i }));
@@ -1116,6 +1116,198 @@ describe("App shell", () => {
           description: "Grocery run",
           category_id: "66666666-6666-6666-6666-666666666666",
           merchant_name: "Perekrestok",
+        }),
+      }),
+    );
+  });
+
+  it("creates a transfer between two accounts", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "44444444-4444-4444-4444-444444444444",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              owner_user_id: null,
+              name: "Tinkoff Black",
+              type: "bank_card",
+              currency_code: "RUB",
+              institution_name: "T-Bank",
+              masked_number: "*1234",
+              opening_balance: "1500.00",
+              is_active: true,
+            },
+            {
+              id: "55555555-5555-5555-5555-555555555555",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              owner_user_id: null,
+              name: "Savings",
+              type: "bank_account",
+              currency_code: "RUB",
+              institution_name: "T-Bank",
+              masked_number: null,
+              opening_balance: "10000.00",
+              is_active: true,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }))
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            outflow: {
+              id: "88888888-8888-8888-8888-888888888888",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              account_id: "44444444-4444-4444-4444-444444444444",
+              user_id: null,
+              type: "transfer",
+              status: "posted",
+              occurred_at: "2026-05-22T12:34:00Z",
+              booked_at: null,
+              amount: "-5000.000000",
+              currency_code: "RUB",
+              original_amount: null,
+              original_currency_code: null,
+              base_amount: null,
+              base_currency_code: null,
+              exchange_rate_id: null,
+              exchange_rate: null,
+              description: "Move to savings",
+              merchant_name: null,
+              merchant_raw: null,
+              category_id: null,
+              category_confidence: null,
+              categorized_by: null,
+              notes: "monthly saving",
+              source: "manual",
+              external_id: null,
+              fingerprint: "transfer-out",
+              created_at: null,
+              updated_at: null,
+              deleted_at: null,
+              splits: [],
+            },
+            inflow: {
+              id: "99999999-9999-9999-9999-999999999999",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              account_id: "55555555-5555-5555-5555-555555555555",
+              user_id: null,
+              type: "transfer",
+              status: "posted",
+              occurred_at: "2026-05-22T12:34:00Z",
+              booked_at: null,
+              amount: "5000.000000",
+              currency_code: "RUB",
+              original_amount: null,
+              original_currency_code: null,
+              base_amount: null,
+              base_currency_code: null,
+              exchange_rate_id: null,
+              exchange_rate: null,
+              description: "Move to savings",
+              merchant_name: null,
+              merchant_raw: null,
+              category_id: null,
+              category_confidence: null,
+              categorized_by: null,
+              notes: "monthly saving",
+              source: "manual",
+              external_id: null,
+              fingerprint: "transfer-in",
+              created_at: null,
+              updated_at: null,
+              deleted_at: null,
+              splits: [],
+            },
+            link_id: "77777777-7777-7777-7777-777777777777",
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "88888888-8888-8888-8888-888888888888",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              account_id: "44444444-4444-4444-4444-444444444444",
+              user_id: null,
+              type: "transfer",
+              status: "posted",
+              occurred_at: "2026-05-22T12:34:00Z",
+              booked_at: null,
+              amount: "-5000.000000",
+              currency_code: "RUB",
+              original_amount: null,
+              original_currency_code: null,
+              base_amount: null,
+              base_currency_code: null,
+              exchange_rate_id: null,
+              exchange_rate: null,
+              description: "Move to savings",
+              merchant_name: null,
+              merchant_raw: null,
+              category_id: null,
+              category_confidence: null,
+              categorized_by: null,
+              notes: "monthly saving",
+              source: "manual",
+              external_id: null,
+              fingerprint: "transfer-out",
+              created_at: null,
+              updated_at: null,
+              deleted_at: null,
+              splits: [],
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: /transactions/i }));
+    await user.selectOptions(await screen.findByLabelText(/source account/i), "44444444-4444-4444-4444-444444444444");
+    await user.selectOptions(screen.getByLabelText(/destination account/i), "55555555-5555-5555-5555-555555555555");
+    await user.type(screen.getByLabelText(/transfer description/i), " Move to savings ");
+    await user.type(screen.getByLabelText(/transfer amount/i), "5000");
+    await user.type(screen.getByLabelText(/transfer occurred at/i), "2026-05-22T12:34");
+    await user.type(screen.getByLabelText(/transfer notes/i), " monthly saving ");
+    await user.click(screen.getByRole("button", { name: /create transfer/i }));
+
+    expect(await screen.findByText(/created transfer Move to savings/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/transactions/transfers",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          from_account_id: "44444444-4444-4444-4444-444444444444",
+          to_account_id: "55555555-5555-5555-5555-555555555555",
+          occurred_at: "2026-05-22T12:34:00.000Z",
+          from_amount: "5000",
+          from_currency_code: "RUB",
+          description: "Move to savings",
+          notes: "monthly saving",
         }),
       }),
     );
