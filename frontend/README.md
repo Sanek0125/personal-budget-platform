@@ -67,6 +67,12 @@ The Accounts page is the first functional MVP page beyond Settings. It uses the 
 - create cash, card, bank, bonus, investment, crypto, or other accounts through `POST /workspaces/{workspace_id}/accounts`;
 - normalize the entered currency code to uppercase before sending it to the backend.
 
+The Categories page connects the existing workspace-scoped categories API to:
+
+- list categories from `GET /workspaces/{workspace_id}/categories`;
+- create top-level `expense`, `income`, `transfer`, or `mixed` categories through `POST /workspaces/{workspace_id}/categories`;
+- include optional display metadata such as color, icon, and sort order.
+
 ## Available scripts
 
 ```bash
