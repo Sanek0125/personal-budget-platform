@@ -1107,6 +1107,295 @@ describe("App shell", () => {
     );
   });
 
+  it("lists reward programs and events for the active workspace", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "99999999-9999-9999-9999-999999999999",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "T-Bank Cashback",
+              program_type: "cashback",
+              currency_code: "RUB",
+              issuer_name: "T-Bank",
+              is_active: true,
+              notes: "Black card",
+              created_at: null,
+              updated_at: null,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "88888888-8888-8888-8888-888888888888",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              program_id: "99999999-9999-9999-9999-999999999999",
+              cashback_rule_id: null,
+              source_transaction_id: null,
+              reward_transaction_id: null,
+              event_type: "earned",
+              status: "posted",
+              reward_kind: "cashback",
+              amount: "125.50",
+              currency_code: "RUB",
+              occurred_at: "2026-05-20T10:00:00Z",
+              description: "May cashback",
+              notes: "posted",
+              created_at: null,
+              updated_at: null,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("link", { name: /rewards/i }));
+
+    expect(await screen.findByRole("heading", { name: /rewards/i })).toBeInTheDocument();
+    expect((await screen.findAllByText("T-Bank Cashback")).length).toBeGreaterThan(0);
+    expect(screen.getByText(/cashback · RUB · active/i)).toBeInTheDocument();
+    expect(screen.getByText("May cashback")).toBeInTheDocument();
+    expect(screen.getByText(/earned · posted · 125.50 RUB/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/rewards/programs",
+      expect.objectContaining({
+        headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/rewards/events",
+      expect.objectContaining({
+        headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
+      }),
+    );
+  });
+
+  it("creates a cashback reward program in the active workspace", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }))
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "99999999-9999-9999-9999-999999999999",
+            workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            name: "T-Bank Cashback",
+            program_type: "cashback",
+            currency_code: "USD",
+            issuer_name: "T-Bank",
+            is_active: true,
+            notes: "Black card",
+            created_at: null,
+            updated_at: null,
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "99999999-9999-9999-9999-999999999999",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "T-Bank Cashback",
+              program_type: "cashback",
+              currency_code: "USD",
+              issuer_name: "T-Bank",
+              is_active: true,
+              notes: "Black card",
+              created_at: null,
+              updated_at: null,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("link", { name: /rewards/i }));
+    await user.type(await screen.findByLabelText(/program name/i), " T-Bank Cashback ");
+    await user.selectOptions(screen.getByLabelText(/program type/i), "cashback");
+    await user.clear(screen.getByLabelText(/reward currency/i));
+    await user.type(screen.getByLabelText(/reward currency/i), "usd");
+    await user.type(screen.getByLabelText(/issuer name/i), " T-Bank ");
+    await user.type(screen.getByLabelText(/program notes/i), " Black card ");
+    await user.click(screen.getByRole("button", { name: /create reward program/i }));
+
+    expect(await screen.findByText(/created reward program T-Bank Cashback/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/rewards/programs",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          name: "T-Bank Cashback",
+          program_type: "cashback",
+          currency_code: "USD",
+          issuer_name: "T-Bank",
+          is_active: true,
+          notes: "Black card",
+        }),
+      }),
+    );
+  });
+
+  it("creates a manual reward event for an existing program", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "99999999-9999-9999-9999-999999999999",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "T-Bank Cashback",
+              program_type: "cashback",
+              currency_code: "RUB",
+              issuer_name: "T-Bank",
+              is_active: true,
+              notes: null,
+              created_at: null,
+              updated_at: null,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "88888888-8888-8888-8888-888888888888",
+            workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            program_id: "99999999-9999-9999-9999-999999999999",
+            cashback_rule_id: null,
+            source_transaction_id: null,
+            reward_transaction_id: null,
+            event_type: "earned",
+            status: "posted",
+            reward_kind: "cashback",
+            amount: "125.50",
+            currency_code: "RUB",
+            occurred_at: "2026-05-20T10:30:00Z",
+            description: "May cashback",
+            notes: "posted",
+            created_at: null,
+            updated_at: null,
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "88888888-8888-8888-8888-888888888888",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              program_id: "99999999-9999-9999-9999-999999999999",
+              cashback_rule_id: null,
+              source_transaction_id: null,
+              reward_transaction_id: null,
+              event_type: "earned",
+              status: "posted",
+              reward_kind: "cashback",
+              amount: "125.50",
+              currency_code: "RUB",
+              occurred_at: "2026-05-20T10:30:00Z",
+              description: "May cashback",
+              notes: "posted",
+              created_at: null,
+              updated_at: null,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("link", { name: /rewards/i }));
+    await user.selectOptions(await screen.findByLabelText(/event program/i), "99999999-9999-9999-9999-999999999999");
+    await user.selectOptions(screen.getByLabelText(/event type/i), "earned");
+    await user.selectOptions(screen.getByLabelText(/event status/i), "posted");
+    await user.type(screen.getByLabelText(/reward amount/i), "125.50");
+    await user.type(screen.getByLabelText(/occurred at/i), "2026-05-20T10:30");
+    await user.type(screen.getByLabelText(/reward description/i), " May cashback ");
+    await user.type(screen.getByLabelText(/reward notes/i), " posted ");
+    await user.click(screen.getByRole("button", { name: /create reward event/i }));
+
+    expect(await screen.findByText(/created reward event May cashback/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/rewards/events",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          program_id: "99999999-9999-9999-9999-999999999999",
+          event_type: "earned",
+          status: "posted",
+          reward_kind: "cashback",
+          amount: "125.50",
+          currency_code: "RUB",
+          occurred_at: "2026-05-20T10:30:00.000Z",
+          description: "May cashback",
+          notes: "posted",
+        }),
+      }),
+    );
+  });
+
   it("creates a development user from settings", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
