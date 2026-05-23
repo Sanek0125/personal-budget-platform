@@ -181,7 +181,6 @@ describe("App shell", () => {
           name: "Studio Budget",
           kind: "personal",
           base_currency_code: "USD",
-          owner_user_id: TEST_USER.id,
         }),
       }),
     );

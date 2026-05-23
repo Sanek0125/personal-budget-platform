@@ -12,7 +12,6 @@ export type WorkspaceCreatePayload = {
   name: string;
   kind: WorkspaceKind;
   base_currency_code: string;
-  owner_user_id: string;
 };
 
 export type User = {

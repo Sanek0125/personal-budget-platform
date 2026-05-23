@@ -13,7 +13,7 @@ from app.api.workspaces import (
     list_workspace_members,
     list_workspaces,
 )
-from app.models import Workspace, WorkspaceMember
+from app.models import User, Workspace, WorkspaceMember
 from app.schemas.workspace import WorkspaceCreate, WorkspaceMemberCreate
 
 
@@ -90,14 +90,20 @@ def _workspace() -> Workspace:
     )
 
 
-def test_workspace_schema_normalizes_currency_and_trims_name() -> None:
-    owner_user_id = uuid4()
+def _user() -> User:
+    return User(
+        id=uuid4(),
+        display_name="Olga",
+        email="olga@example.com",
+        is_active=True,
+    )
 
+
+def test_workspace_schema_normalizes_currency_and_trims_name_without_owner() -> None:
     payload = WorkspaceCreate(
         name="  Family Budget  ",
         kind="family",
         base_currency_code=" usd ",
-        owner_user_id=owner_user_id,
     )
 
     assert payload.name == "Family Budget"
@@ -111,7 +117,6 @@ def test_workspace_schema_rejects_blank_names(blank_name: str) -> None:
             name=blank_name,
             kind="personal",
             base_currency_code="USD",
-            owner_user_id=uuid4(),
         )
 
 
@@ -124,61 +129,46 @@ def test_workspace_schema_rejects_non_string_currency_codes(
             name="Personal",
             kind="personal",
             base_currency_code=bad_currency,  # type: ignore[arg-type]
-            owner_user_id=uuid4(),
         )
 
 
-async def test_create_workspace_creates_owner_membership() -> None:
-    owner_user_id = uuid4()
-    session = _FakeAsyncSession(owner_user_id, "USD")
+async def test_create_workspace_creates_owner_membership_for_current_user() -> None:
+    owner_user = _user()
+    spoofed_owner_id = uuid4()
+    session = _FakeAsyncSession("USD")
 
     workspace = await create_workspace(
-        WorkspaceCreate(
-            name="Personal",
-            kind="personal",
-            base_currency_code="usd",
-            owner_user_id=owner_user_id,
+        WorkspaceCreate.model_validate(
+            {
+                "name": "Personal",
+                "kind": "personal",
+                "base_currency_code": "usd",
+                "owner_user_id": spoofed_owner_id,
+            }
         ),
+        owner_user,
         session,  # type: ignore[arg-type]
     )
 
     assert isinstance(workspace, Workspace)
     assert workspace.name == "Personal"
     assert workspace.base_currency_code == "USD"
-    assert workspace.owner_user_id == owner_user_id
+    assert workspace.owner_user_id == owner_user.id
+    assert workspace.owner_user_id != spoofed_owner_id
     assert len(session.added) == 2
     assert session.added[0] is workspace
     membership = session.added[1]
     assert isinstance(membership, WorkspaceMember)
     assert membership.workspace is workspace
-    assert membership.user_id == owner_user_id
+    assert membership.user_id == owner_user.id
     assert membership.role == "owner"
     assert session.committed is True
     assert session.refreshed is workspace
 
 
-async def test_create_workspace_returns_404_when_owner_missing() -> None:
-    session = _FakeAsyncSession(None)
-
-    with pytest.raises(HTTPException) as exc_info:
-        await create_workspace(
-            WorkspaceCreate(
-                name="Missing Owner",
-                kind="personal",
-                base_currency_code="USD",
-                owner_user_id=uuid4(),
-            ),
-            session,  # type: ignore[arg-type]
-        )
-
-    assert exc_info.value.status_code == 404
-    assert exc_info.value.detail == "Owner user not found"
-    assert session.added == []
-
-
 async def test_create_workspace_returns_404_when_currency_missing() -> None:
-    owner_user_id = uuid4()
-    session = _FakeAsyncSession(owner_user_id, None)
+    owner_user = _user()
+    session = _FakeAsyncSession(None)
 
     with pytest.raises(HTTPException) as exc_info:
         await create_workspace(
@@ -186,8 +176,8 @@ async def test_create_workspace_returns_404_when_currency_missing() -> None:
                 name="Missing Currency",
                 kind="personal",
                 base_currency_code="ZZZ",
-                owner_user_id=owner_user_id,
             ),
+            owner_user,
             session,  # type: ignore[arg-type]
         )
 
@@ -197,9 +187,8 @@ async def test_create_workspace_returns_404_when_currency_missing() -> None:
 
 
 async def test_create_workspace_rolls_back_integrity_errors() -> None:
-    owner_user_id = uuid4()
+    owner_user = _user()
     session = _FakeAsyncSession(
-        owner_user_id,
         "USD",
         commit_error=IntegrityError("insert", {}, Exception("constraint")),
     )
@@ -210,8 +199,8 @@ async def test_create_workspace_rolls_back_integrity_errors() -> None:
                 name="Personal",
                 kind="personal",
                 base_currency_code="USD",
-                owner_user_id=owner_user_id,
             ),
+            owner_user,
             session,  # type: ignore[arg-type]
         )
 

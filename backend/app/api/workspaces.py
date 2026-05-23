@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth import CurrentUserDep, get_current_user_id
+from app.api.auth import CurrentUserDep, CurrentUserObjectDep
 from app.db.session import get_db_session
 from app.models.currency import Currency
 from app.models.user import User
@@ -63,21 +63,12 @@ async def get_workspace(
     "",
     response_model=WorkspaceRead,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(get_current_user_id)],
 )
 async def create_workspace(
     payload: WorkspaceCreate,
+    current_user: CurrentUserObjectDep,
     session: SessionDep,
 ) -> Workspace:
-    owner = await session.execute(
-        select(User.id).where(User.id == payload.owner_user_id)
-    )
-    if owner.scalar_one_or_none() is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Owner user not found",
-        )
-
     currency = await session.execute(
         select(Currency.code).where(Currency.code == payload.base_currency_code)
     )
@@ -87,10 +78,15 @@ async def create_workspace(
             detail="Base currency not found",
         )
 
-    workspace = Workspace(**payload.model_dump())
+    workspace = Workspace(
+        name=payload.name,
+        kind=payload.kind,
+        base_currency_code=payload.base_currency_code,
+        owner_user_id=current_user.id,
+    )
     membership = WorkspaceMember(
         workspace=workspace,
-        user_id=payload.owner_user_id,
+        user_id=current_user.id,
         role="owner",
     )
     session.add(workspace)

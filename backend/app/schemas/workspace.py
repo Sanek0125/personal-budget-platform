@@ -13,7 +13,6 @@ class WorkspaceCreate(BaseModel):
     name: str = Field(min_length=1)
     kind: WorkspaceKind
     base_currency_code: str = Field(min_length=3, max_length=3)
-    owner_user_id: UUID
 
     @field_validator("name")
     @classmethod
