@@ -1,8 +1,26 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
+
+const TEST_TOKEN = "test-token";
+const TEST_USER = {
+  id: "00000000-0000-0000-0000-000000000001",
+  email: "olga@example.com",
+  display_name: "Olga",
+  telegram_id: null,
+  is_active: true,
+};
+
+function authMeResponse() {
+  return new Response(JSON.stringify(TEST_USER), { status: 200, headers: { "Content-Type": "application/json" } });
+}
+
+beforeEach(() => {
+  localStorage.setItem("personal-budget.auth-token", TEST_TOKEN);
+});
+
 
 afterEach(() => {
   cleanup();
@@ -12,24 +30,130 @@ afterEach(() => {
 });
 
 describe("App shell", () => {
+
+  it("shows the login form before loading workspaces when no token is stored", async () => {
+    localStorage.clear();
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    render(<App />);
+
+    expect(screen.getByRole("heading", { name: /sign in/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
+    expect(screen.queryByText(/select a workspace/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(fetchMock).not.toHaveBeenCalled());
+  });
+
+  it("logs in, stores the bearer token, then loads workspaces with Authorization", async () => {
+    localStorage.clear();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ access_token: TEST_TOKEN, token_type: "bearer", user: TEST_USER }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: TEST_USER.id,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText(/email/i), " olga@example.com ");
+    await user.type(screen.getByLabelText(/password/i), "secret-password");
+    await user.click(screen.getByRole("button", { name: /sign in/i }));
+
+    expect(await screen.findByText("Family Budget")).toBeInTheDocument();
+    expect(localStorage.getItem("personal-budget.auth-token")).toBe(TEST_TOKEN);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/auth/login",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ email: "olga@example.com", password: "secret-password" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/workspaces",
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: `Bearer ${TEST_TOKEN}` }) }),
+    );
+  });
+
+
+  it("registers a new user, stores the bearer token, then loads workspaces", async () => {
+    localStorage.clear();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ access_token: TEST_TOKEN, token_type: "bearer", user: TEST_USER }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }));
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: /create a new account/i }));
+    await user.type(screen.getByLabelText(/email/i), " Olga@Example.com ");
+    await user.type(screen.getByLabelText(/display name/i), " Olga ");
+    await user.type(screen.getByLabelText(/password/i), "secret-password");
+    await user.click(screen.getByRole("button", { name: /^create account$/i }));
+
+    expect(await screen.findByText(/select a workspace/i)).toBeInTheDocument();
+    expect(localStorage.getItem("personal-budget.auth-token")).toBe(TEST_TOKEN);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/auth/register",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          email: "olga@example.com",
+          password: "secret-password",
+          display_name: "Olga",
+        }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/workspaces",
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: `Bearer ${TEST_TOKEN}` }) }),
+    );
+  });
+
   it("renders the dashboard layout with core personal-budget navigation", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response("[]", { status: 200 }));
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(authMeResponse()).mockResolvedValueOnce(new Response("[]", { status: 200 }));
 
     render(<App />);
 
     expect(screen.getByRole("heading", { name: /personal budget/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /dashboard/i })).toHaveAttribute("href", "/");
-    expect(screen.getByRole("link", { name: /transactions/i })).toHaveAttribute("href", "/transactions");
-    expect(screen.getByRole("link", { name: /accounts/i })).toHaveAttribute("href", "/accounts");
-    expect(screen.getByRole("link", { name: /imports/i })).toHaveAttribute("href", "/imports");
-    expect(screen.getByRole("link", { name: /budgets/i })).toHaveAttribute("href", "/budgets");
-    expect(screen.getByRole("link", { name: /debts/i })).toHaveAttribute("href", "/debts");
-    expect(screen.getByRole("link", { name: /rewards/i })).toHaveAttribute("href", "/rewards");
-    expect(await screen.findByText(/select a workspace/i)).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /dashboard/i })).toHaveAttribute("href", "/");
+    expect(await screen.findByRole("link", { name: /transactions/i })).toHaveAttribute("href", "/transactions");
+    expect(await screen.findByRole("link", { name: /accounts/i })).toHaveAttribute("href", "/accounts");
+    expect(await screen.findByRole("link", { name: /imports/i })).toHaveAttribute("href", "/imports");
+    expect(await screen.findByRole("link", { name: /budgets/i })).toHaveAttribute("href", "/budgets");
+    expect(await screen.findByRole("link", { name: /debts/i })).toHaveAttribute("href", "/debts");
+    expect(await screen.findByRole("link", { name: /rewards/i })).toHaveAttribute("href", "/rewards");
+    expect((await screen.findAllByText(/select a workspace/i)).length).toBeGreaterThan(0);
   });
 
   it("loads workspaces for the development user and shows the active workspace", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(authMeResponse()).mockResolvedValueOnce(
       new Response(
         JSON.stringify([
           {
@@ -52,7 +176,7 @@ describe("App shell", () => {
       expect(fetchMock).toHaveBeenCalledWith(
         "/workspaces",
         expect.objectContaining({
-          headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
+          headers: expect.objectContaining({ Authorization: `Bearer ${TEST_TOKEN}` }),
         }),
       ),
     );
@@ -61,6 +185,7 @@ describe("App shell", () => {
   it("lets users switch the active workspace and keeps pages scoped to that workspace", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify([
@@ -94,14 +219,14 @@ describe("App shell", () => {
       "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
     );
 
-    await user.click(screen.getByRole("link", { name: /accounts/i }));
+    await user.click(await screen.findByRole("link", { name: /accounts/i }));
 
     expect(await screen.findByRole("heading", { name: /accounts/i })).toBeInTheDocument();
     await waitFor(() =>
       expect(fetchMock).toHaveBeenLastCalledWith(
         "/workspaces/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/accounts",
         expect.objectContaining({
-          headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
+          headers: expect.objectContaining({ Authorization: `Bearer ${TEST_TOKEN}` }),
         }),
       ),
     );
@@ -110,6 +235,7 @@ describe("App shell", () => {
   it("loads a dashboard overview for the active workspace", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify([
@@ -250,7 +376,7 @@ describe("App shell", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/transactions",
       expect.objectContaining({
-        headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
+        headers: expect.objectContaining({ Authorization: `Bearer ${TEST_TOKEN}` }),
       }),
     );
   });
@@ -258,6 +384,7 @@ describe("App shell", () => {
   it("lists accounts for the active workspace", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify([
@@ -294,7 +421,7 @@ describe("App shell", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("link", { name: /accounts/i }));
+    await user.click(await screen.findByRole("link", { name: /accounts/i }));
 
     expect(await screen.findByRole("heading", { name: /accounts/i })).toBeInTheDocument();
     expect(await screen.findByText("Tinkoff Black")).toBeInTheDocument();
@@ -303,7 +430,7 @@ describe("App shell", () => {
     expect(fetchMock).toHaveBeenLastCalledWith(
       "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/accounts",
       expect.objectContaining({
-        headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
+        headers: expect.objectContaining({ Authorization: `Bearer ${TEST_TOKEN}` }),
       }),
     );
   });
@@ -311,6 +438,7 @@ describe("App shell", () => {
   it("creates an account in the active workspace", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify([
@@ -365,7 +493,7 @@ describe("App shell", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("link", { name: /accounts/i }));
+    await user.click(await screen.findByRole("link", { name: /accounts/i }));
     await user.type(await screen.findByLabelText(/account name/i), " Cash Wallet ");
     await user.selectOptions(screen.getByLabelText(/account type/i), "cash");
     await user.clear(screen.getByLabelText(/currency/i));
@@ -375,7 +503,7 @@ describe("App shell", () => {
 
     expect(await screen.findByText(/created account Cash Wallet/i)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
+      4,
       "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/accounts",
       expect.objectContaining({
         method: "POST",
@@ -392,6 +520,7 @@ describe("App shell", () => {
   it("lists categories for the active workspace", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify([
@@ -427,7 +556,7 @@ describe("App shell", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("link", { name: /categories/i }));
+    await user.click(await screen.findByRole("link", { name: /categories/i }));
 
     expect(await screen.findByRole("heading", { name: /categories/i })).toBeInTheDocument();
     expect(await screen.findByText("Groceries")).toBeInTheDocument();
@@ -435,7 +564,7 @@ describe("App shell", () => {
     expect(fetchMock).toHaveBeenLastCalledWith(
       "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/categories",
       expect.objectContaining({
-        headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
+        headers: expect.objectContaining({ Authorization: `Bearer ${TEST_TOKEN}` }),
       }),
     );
   });
@@ -443,6 +572,7 @@ describe("App shell", () => {
   it("creates a category in the active workspace", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify([
@@ -495,7 +625,7 @@ describe("App shell", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("link", { name: /categories/i }));
+    await user.click(await screen.findByRole("link", { name: /categories/i }));
     await user.type(await screen.findByLabelText(/category name/i), " Salary ");
     await user.selectOptions(screen.getByLabelText(/category type/i), "income");
     await user.type(screen.getByLabelText(/color/i), "#0ea5e9");
@@ -506,7 +636,7 @@ describe("App shell", () => {
 
     expect(await screen.findByText(/created category Salary/i)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
+      4,
       "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/categories",
       expect.objectContaining({
         method: "POST",
@@ -524,6 +654,7 @@ describe("App shell", () => {
   it("lists transactions with account and category context for the active workspace", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify([
@@ -617,7 +748,7 @@ describe("App shell", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("link", { name: /transactions/i }));
+    await user.click(await screen.findByRole("link", { name: /transactions/i }));
 
     expect(await screen.findByRole("heading", { name: /transactions/i })).toBeInTheDocument();
     expect(await screen.findByText("Grocery run")).toBeInTheDocument();
@@ -626,7 +757,7 @@ describe("App shell", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/transactions",
       expect.objectContaining({
-        headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
+        headers: expect.objectContaining({ Authorization: `Bearer ${TEST_TOKEN}` }),
       }),
     );
   });
@@ -634,6 +765,7 @@ describe("App shell", () => {
   it("creates an expense transaction in the active workspace", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify([
@@ -727,7 +859,7 @@ describe("App shell", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("link", { name: /transactions/i }));
+    await user.click(await screen.findByRole("link", { name: /transactions/i }));
     await user.selectOptions(await screen.findByLabelText(/account/i), "44444444-4444-4444-4444-444444444444");
     await user.selectOptions(screen.getByLabelText(/transaction type/i), "expense");
     await user.type(screen.getByLabelText(/description/i), " Grocery run ");
@@ -739,7 +871,7 @@ describe("App shell", () => {
 
     expect(await screen.findByText(/created transaction Grocery run/i)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(
-      5,
+      6,
       "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/transactions",
       expect.objectContaining({
         method: "POST",
@@ -760,6 +892,7 @@ describe("App shell", () => {
   it("lists budgets for the active workspace", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify([
@@ -797,7 +930,7 @@ describe("App shell", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("link", { name: /budgets/i }));
+    await user.click(await screen.findByRole("link", { name: /budgets/i }));
 
     expect(await screen.findByRole("heading", { name: /budgets/i })).toBeInTheDocument();
     expect(await screen.findByText("May 2026 Budget")).toBeInTheDocument();
@@ -806,7 +939,7 @@ describe("App shell", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/budgets",
       expect.objectContaining({
-        headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
+        headers: expect.objectContaining({ Authorization: `Bearer ${TEST_TOKEN}` }),
       }),
     );
   });
@@ -814,6 +947,7 @@ describe("App shell", () => {
   it("creates a budget in the active workspace", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify([
@@ -851,7 +985,7 @@ describe("App shell", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("link", { name: /budgets/i }));
+    await user.click(await screen.findByRole("link", { name: /budgets/i }));
     await user.type(await screen.findByLabelText(/budget name/i), " June 2026 Budget ");
     await user.type(screen.getByLabelText(/period start/i), "2026-06-01");
     await user.type(screen.getByLabelText(/period end/i), "2026-06-30");
@@ -861,7 +995,7 @@ describe("App shell", () => {
 
     expect(await screen.findByText(/created budget June 2026 Budget/i)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(
-      4,
+      5,
       "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/budgets",
       expect.objectContaining({
         method: "POST",
@@ -880,6 +1014,7 @@ describe("App shell", () => {
   it("uploads a CSV import and previews normalized rows", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify([
@@ -968,7 +1103,7 @@ describe("App shell", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("link", { name: /imports/i }));
+    await user.click(await screen.findByRole("link", { name: /imports/i }));
     await user.selectOptions(await screen.findByLabelText(/target account/i), "44444444-4444-4444-4444-444444444444");
     await user.type(screen.getByLabelText(/source name/i), " T-Bank ");
     await user.type(screen.getByLabelText(/original filename/i), "statement.csv");
@@ -982,7 +1117,7 @@ describe("App shell", () => {
     expect(await screen.findByText("Lunch")).toBeInTheDocument();
     expect(screen.getByText(/expense · -12.34 RUB · pending/i)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
+      4,
       "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/imports/upload",
       expect.objectContaining({
         method: "POST",
@@ -1006,6 +1141,7 @@ describe("App shell", () => {
   it("confirms an uploaded import batch", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify([
@@ -1080,7 +1216,7 @@ describe("App shell", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("link", { name: /imports/i }));
+    await user.click(await screen.findByRole("link", { name: /imports/i }));
     await user.selectOptions(await screen.findByLabelText(/target account/i), "44444444-4444-4444-4444-444444444444");
     await user.type(screen.getByLabelText(/original filename/i), "statement.csv");
     await user.type(screen.getByLabelText(/csv content/i), "Date,Amount,Currency,Description{enter}2026-05-21,-12.34,rub,Lunch");
@@ -1089,7 +1225,7 @@ describe("App shell", () => {
 
     expect(await screen.findByText(/confirmed import: 1 imported, 0 duplicates, 0 errors/i)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(
-      5,
+      6,
       "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/imports/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/confirm",
       expect.objectContaining({ method: "POST", body: JSON.stringify({}) }),
     );
@@ -1098,6 +1234,7 @@ describe("App shell", () => {
   it("lists debts and the workspace debt summary", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify([
@@ -1156,7 +1293,7 @@ describe("App shell", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("link", { name: /debts/i }));
+    await user.click(await screen.findByRole("link", { name: /debts/i }));
 
     expect(await screen.findByRole("heading", { name: /debts/i })).toBeInTheDocument();
     expect(await screen.findByText("Loan to Ivan")).toBeInTheDocument();
@@ -1165,13 +1302,13 @@ describe("App shell", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/debts",
       expect.objectContaining({
-        headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
+        headers: expect.objectContaining({ Authorization: `Bearer ${TEST_TOKEN}` }),
       }),
     );
     expect(fetchMock).toHaveBeenCalledWith(
       "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/debts/summary",
       expect.objectContaining({
-        headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
+        headers: expect.objectContaining({ Authorization: `Bearer ${TEST_TOKEN}` }),
       }),
     );
   });
@@ -1179,6 +1316,7 @@ describe("App shell", () => {
   it("creates a debt with a new contact in the active workspace", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify([
@@ -1266,7 +1404,7 @@ describe("App shell", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("link", { name: /debts/i }));
+    await user.click(await screen.findByRole("link", { name: /debts/i }));
     await user.type(await screen.findByLabelText(/contact name/i), " Ivan ");
     await user.selectOptions(screen.getByLabelText(/debt direction/i), "i_owe_them");
     await user.type(screen.getByLabelText(/principal amount/i), "1200.00");
@@ -1278,7 +1416,7 @@ describe("App shell", () => {
 
     expect(await screen.findByText(/created debt Borrowed for dinner/i)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(
-      4,
+      5,
       "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/debts",
       expect.objectContaining({
         method: "POST",
@@ -1297,6 +1435,7 @@ describe("App shell", () => {
   it("lists reward programs and events for the active workspace", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify([
@@ -1358,7 +1497,7 @@ describe("App shell", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("link", { name: /rewards/i }));
+    await user.click(await screen.findByRole("link", { name: /rewards/i }));
 
     expect(await screen.findByRole("heading", { name: /rewards/i })).toBeInTheDocument();
     expect((await screen.findAllByText("T-Bank Cashback")).length).toBeGreaterThan(0);
@@ -1368,13 +1507,13 @@ describe("App shell", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/rewards/programs",
       expect.objectContaining({
-        headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
+        headers: expect.objectContaining({ Authorization: `Bearer ${TEST_TOKEN}` }),
       }),
     );
     expect(fetchMock).toHaveBeenCalledWith(
       "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/rewards/events",
       expect.objectContaining({
-        headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
+        headers: expect.objectContaining({ Authorization: `Bearer ${TEST_TOKEN}` }),
       }),
     );
   });
@@ -1382,6 +1521,7 @@ describe("App shell", () => {
   it("creates a cashback reward program in the active workspace", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify([
@@ -1437,7 +1577,7 @@ describe("App shell", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("link", { name: /rewards/i }));
+    await user.click(await screen.findByRole("link", { name: /rewards/i }));
     await user.type(await screen.findByLabelText(/program name/i), " T-Bank Cashback ");
     await user.selectOptions(screen.getByLabelText(/program type/i), "cashback");
     await user.clear(screen.getByLabelText(/reward currency/i));
@@ -1448,7 +1588,7 @@ describe("App shell", () => {
 
     expect(await screen.findByText(/created reward program T-Bank Cashback/i)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(
-      4,
+      5,
       "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/rewards/programs",
       expect.objectContaining({
         method: "POST",
@@ -1467,6 +1607,7 @@ describe("App shell", () => {
   it("creates a manual reward event for an existing program", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify([
@@ -1552,7 +1693,7 @@ describe("App shell", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("link", { name: /rewards/i }));
+    await user.click(await screen.findByRole("link", { name: /rewards/i }));
     await user.selectOptions(await screen.findByLabelText(/event program/i), "99999999-9999-9999-9999-999999999999");
     await user.selectOptions(screen.getByLabelText(/event type/i), "earned");
     await user.selectOptions(screen.getByLabelText(/event status/i), "posted");
@@ -1564,7 +1705,7 @@ describe("App shell", () => {
 
     expect(await screen.findByText(/created reward event May cashback/i)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(
-      4,
+      5,
       "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/rewards/events",
       expect.objectContaining({
         method: "POST",
@@ -1586,6 +1727,7 @@ describe("App shell", () => {
   it("creates a development user from settings", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
       .mockResolvedValueOnce(new Response("[]", { status: 200 }))
       .mockResolvedValueOnce(
         new Response(
@@ -1602,7 +1744,7 @@ describe("App shell", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("link", { name: /settings/i }));
+    await user.click(await screen.findByRole("link", { name: /settings/i }));
     await user.type(screen.getByLabelText(/display name/i), " Olga ");
     await user.type(screen.getByLabelText(/^email$/i), "OLGA@example.com");
     await user.click(screen.getByRole("button", { name: /create user/i }));
@@ -1620,6 +1762,7 @@ describe("App shell", () => {
   it("adds an existing user to the active workspace from settings", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify([
@@ -1662,7 +1805,7 @@ describe("App shell", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("link", { name: /settings/i }));
+    await user.click(await screen.findByRole("link", { name: /settings/i }));
     await user.type(screen.getByLabelText(/find user by email/i), "OLGA@example.com");
     await user.click(screen.getByRole("button", { name: /find user/i }));
     await user.click(await screen.findByRole("button", { name: /add Olga as member/i }));
@@ -1677,13 +1820,13 @@ describe("App shell", () => {
     );
   });
 
-  it("renders a not-found page for unknown routes", () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response("[]", { status: 200 }));
+  it("renders a not-found page for unknown routes", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(authMeResponse()).mockResolvedValueOnce(new Response("[]", { status: 200 }));
     window.history.pushState({}, "", "/missing-page");
 
     render(<App />);
 
-    expect(screen.getByRole("heading", { name: /page not found/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /back to dashboard/i })).toHaveAttribute("href", "/");
+    expect(await screen.findByRole("heading", { name: /page not found/i })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /back to dashboard/i })).toHaveAttribute("href", "/");
   });
 });

@@ -13,6 +13,7 @@ import { TransactionsPage } from "../features/transactions/TransactionsPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { navigationItems } from "../routes/navigation";
+import { useAuth } from "./authContext";
 import { useWorkspaces } from "./useWorkspaces";
 
 const ACTIVE_WORKSPACE_STORAGE_KEY = "personal-budget.active-workspace-id";
@@ -26,6 +27,7 @@ function storeWorkspaceId(workspaceId: string) {
 }
 
 export function Shell() {
+  const { currentUser, logout } = useAuth();
   const workspacesQuery = useWorkspaces();
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(readStoredWorkspaceId);
   const activeWorkspace =
@@ -45,6 +47,13 @@ export function Shell() {
             <p className="eyebrow">Finance OS</p>
             <h1>Personal Budget</h1>
           </div>
+        </div>
+
+        <div className="auth-summary">
+          <span>{currentUser?.display_name}</span>
+          <button type="button" onClick={() => void logout()}>
+            Sign out
+          </button>
         </div>
 
         <WorkspaceCard
@@ -69,7 +78,7 @@ export function Shell() {
           <Route path="transactions" element={<TransactionsPage activeWorkspace={activeWorkspace} />} />
           <Route path="accounts" element={<AccountsPage activeWorkspace={activeWorkspace} />} />
           <Route path="categories" element={<CategoriesPage activeWorkspace={activeWorkspace} />} />
-          <Route path="imports" element={<ImportsPage activeWorkspace={activeWorkspace} />} />
+          <Route path="imports" element={<ImportsPage activeWorkspace={activeWorkspace} currentUser={currentUser!} />} />
           <Route path="budgets" element={<BudgetsPage activeWorkspace={activeWorkspace} />} />
           <Route path="debts" element={<DebtsPage activeWorkspace={activeWorkspace} />} />
           <Route path="rewards" element={<RewardsPage activeWorkspace={activeWorkspace} />} />

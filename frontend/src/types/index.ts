@@ -14,6 +14,12 @@ export type User = {
   is_active: boolean;
 };
 
+export type AuthToken = {
+  access_token: string;
+  token_type: "bearer";
+  user: User;
+};
+
 export type WorkspaceMember = {
   id: string;
   workspace_id: string;
