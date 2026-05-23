@@ -202,6 +202,138 @@ describe("App shell", () => {
     );
   });
 
+  it("lists categories for the active workspace", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "66666666-6666-6666-6666-666666666666",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              parent_id: null,
+              name: "Groceries",
+              type: "expense",
+              color: "#22c55e",
+              icon: "cart",
+              sort_order: 10,
+              is_system: false,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("link", { name: /categories/i }));
+
+    expect(await screen.findByRole("heading", { name: /categories/i })).toBeInTheDocument();
+    expect(await screen.findByText("Groceries")).toBeInTheDocument();
+    expect(screen.getByText(/expense · #22c55e · cart/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/categories",
+      expect.objectContaining({
+        headers: expect.objectContaining({ "X-User-Id": expect.any(String) }),
+      }),
+    );
+  });
+
+  it("creates a category in the active workspace", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "77777777-7777-7777-7777-777777777777",
+            workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            parent_id: null,
+            name: "Salary",
+            type: "income",
+            color: "#0ea5e9",
+            icon: "wallet",
+            sort_order: 25,
+            is_system: false,
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "77777777-7777-7777-7777-777777777777",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              parent_id: null,
+              name: "Salary",
+              type: "income",
+              color: "#0ea5e9",
+              icon: "wallet",
+              sort_order: 25,
+              is_system: false,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("link", { name: /categories/i }));
+    await user.type(await screen.findByLabelText(/category name/i), " Salary ");
+    await user.selectOptions(screen.getByLabelText(/category type/i), "income");
+    await user.type(screen.getByLabelText(/color/i), "#0ea5e9");
+    await user.type(screen.getByLabelText(/icon/i), " wallet ");
+    await user.clear(screen.getByLabelText(/sort order/i));
+    await user.type(screen.getByLabelText(/sort order/i), "25");
+    await user.click(screen.getByRole("button", { name: /create category/i }));
+
+    expect(await screen.findByText(/created category Salary/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/categories",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          name: "Salary",
+          type: "income",
+          color: "#0ea5e9",
+          icon: "wallet",
+          sort_order: 25,
+        }),
+      }),
+    );
+  });
+
   it("creates a development user from settings", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
