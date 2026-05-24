@@ -1890,6 +1890,106 @@ describe("App shell", () => {
     );
   });
 
+  it("uploads a CSV import from a selected file", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(authMeResponse())
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              name: "Family Budget",
+              kind: "family",
+              base_currency_code: "RUB",
+              owner_user_id: "11111111-1111-1111-1111-111111111111",
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: "44444444-4444-4444-4444-444444444444",
+              workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              owner_user_id: null,
+              name: "Tinkoff Black",
+              type: "bank_card",
+              currency_code: "RUB",
+              institution_name: "T-Bank",
+              masked_number: "*1234",
+              opening_balance: "1500.00",
+              is_active: true,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            workspace_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            user_id: "00000000-0000-0000-0000-000000000001",
+            account_id: "44444444-4444-4444-4444-444444444444",
+            file_id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+            source_type: "csv",
+            source_name: "T-Bank",
+            original_filename: "real-statement.csv",
+            file_hash: "hash-1",
+            file_size: 72,
+            status: "parsed",
+            total_rows: 1,
+            imported_count: 0,
+            duplicate_count: 0,
+            error_count: 0,
+            parser_version: "csv-v1",
+            uploaded_at: null,
+            processed_at: null,
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("link", { name: /imports/i }));
+    await user.selectOptions(await screen.findByLabelText(/target account/i), "44444444-4444-4444-4444-444444444444");
+    await user.type(screen.getByLabelText(/source name/i), " T-Bank ");
+    await user.upload(
+      screen.getByLabelText(/statement file/i),
+      new File(["Date,Amount,Currency,Description\n2026-05-21,-12.34,rub,Lunch"], "real-statement.csv", {
+        type: "text/csv",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: /upload import/i }));
+
+    expect(await screen.findByText(/uploaded import real-statement.csv/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/imports/upload",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          user_id: "00000000-0000-0000-0000-000000000001",
+          account_id: "44444444-4444-4444-4444-444444444444",
+          original_filename: "real-statement.csv",
+          content: "Date,Amount,Currency,Description\n2026-05-21,-12.34,rub,Lunch",
+          source_name: "T-Bank",
+          parser_name: "generic_csv",
+          column_mapping: {
+            occurred_at: "Date",
+            amount: "Amount",
+            currency_code: "Currency",
+            description: "Description",
+          },
+        }),
+      }),
+    );
+  });
+
   it("uploads a Freedom import with the bank parser", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

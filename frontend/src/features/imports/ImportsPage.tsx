@@ -1,13 +1,28 @@
-import { type FormEvent, useState } from "react";
+import { type ChangeEvent, type FormEvent, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { apiGet, apiPost } from "../../api/client";
 import type { Account, CsvImportUploadPayload, ImportBatch, ImportConfirmResult, ImportRow, User, Workspace } from "../../types";
 
+type ImportParserName = "generic_csv" | "freedom";
+
+function readFileAsText(file: File): Promise<string> {
+  if (typeof file.text === "function") {
+    return file.text();
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result ?? "")));
+    reader.addEventListener("error", () => reject(reader.error ?? new Error("Unable to read file")));
+    reader.readAsText(file);
+  });
+}
+
 export function ImportsPage({ activeWorkspace, currentUser }: { activeWorkspace?: Workspace; currentUser: User }) {
   const [accountId, setAccountId] = useState("");
   const [sourceName, setSourceName] = useState("");
-  const [parserName, setParserName] = useState<"generic_csv" | "freedom">("generic_csv");
+  const [parserName, setParserName] = useState<ImportParserName>("generic_csv");
   const [originalFilename, setOriginalFilename] = useState("");
   const [csvContent, setCsvContent] = useState("");
   const [currentBatch, setCurrentBatch] = useState<ImportBatch | null>(null);
@@ -19,6 +34,22 @@ export function ImportsPage({ activeWorkspace, currentUser }: { activeWorkspace?
     queryFn: () => apiGet<Account[]>(`/workspaces/${activeWorkspace?.id}/accounts`),
     enabled: Boolean(activeWorkspace),
   });
+
+  async function handleStatementFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const content = await readFileAsText(file);
+      setOriginalFilename(file.name);
+      setCsvContent(content);
+      setStatusMessage(`Selected file ${file.name}`);
+    } catch {
+      setStatusMessage("Unable to read selected file");
+    }
+  }
 
   async function handleUploadImport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -110,7 +141,7 @@ export function ImportsPage({ activeWorkspace, currentUser }: { activeWorkspace?
           </label>
           <label>
             Parser
-            <select value={parserName} onChange={(event) => setParserName(event.target.value as "generic_csv" | "freedom")}>
+            <select value={parserName} onChange={(event) => setParserName(event.target.value as ImportParserName)}>
               <option value="generic_csv">Generic CSV</option>
               <option value="freedom">Freedom Bank</option>
             </select>
@@ -120,12 +151,28 @@ export function ImportsPage({ activeWorkspace, currentUser }: { activeWorkspace?
             <input value={sourceName} onChange={(event) => setSourceName(event.target.value)} placeholder={parserName === "freedom" ? "Freedom Bank" : undefined} />
           </label>
           <label>
-            Original filename
-            <input value={originalFilename} onChange={(event) => setOriginalFilename(event.target.value)} required />
+            Statement file
+            <input accept=".csv,.txt,.pdf,text/csv,text/plain,application/pdf" type="file" onChange={(event) => void handleStatementFileChange(event)} />
           </label>
           <label>
-            CSV content
-            <textarea value={csvContent} onChange={(event) => setCsvContent(event.target.value)} required />
+            Original filename
+            <input
+              value={originalFilename}
+              onChange={(event) => {
+                setOriginalFilename(event.target.value);
+              }}
+              required
+            />
+          </label>
+          <label>
+            CSV content or statement text
+            <textarea
+              value={csvContent}
+              onChange={(event) => {
+                setCsvContent(event.target.value);
+              }}
+              required
+            />
           </label>
           <p>
             Expected columns: <strong>{parserName === "freedom" ? "Freedom statement columns" : "Date, Amount, Currency, Description"}</strong>
