@@ -1,8 +1,9 @@
 from datetime import UTC, datetime
 from decimal import Decimal
+from io import BytesIO
 from uuid import uuid4
 
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from sqlalchemy import CheckConstraint, Index, UniqueConstraint, inspect
 from sqlalchemy.exc import IntegrityError
 
@@ -11,6 +12,7 @@ from app.api.imports import (
     get_import_batch,
     list_import_rows,
     upload_csv_import,
+    upload_import_file,
 )
 from app.db.base import Base
 from app.models import Account, File, ImportBatch, ImportRow, Transaction
@@ -358,6 +360,43 @@ async def test_upload_freedom_import_creates_file_batch_and_rows_without_mapping
     assert batch.total_rows == 2
     assert rows[1].normalized_data["description"] == "Конвертация"
     assert rows[1].normalized_data["amount"] == "-7405.67"
+
+
+async def test_upload_raw_pdf_file_extracts_text_and_creates_batch(monkeypatch) -> None:
+    workspace_id = uuid4()
+    account = _account(workspace_id, currency_code="KZT")
+    user_id = uuid4()
+    session = _FakeAsyncSession(workspace_id, account, user_id)
+    pdf_bytes = b"%PDF-1.4\n% raw bank statement bytes\n"
+
+    def fake_extract_pdf_text(content: bytes) -> str:
+        assert content == pdf_bytes
+        return _freedom_pdf_text_fixture()
+
+    monkeypatch.setattr(
+        "app.api.imports.extract_pdf_text_from_bytes", fake_extract_pdf_text
+    )
+
+    batch = await upload_import_file(
+        workspace_id,
+        user_id=user_id,
+        account_id=account.id,
+        parser_name="freedom",
+        source_name="Freedom Bank",
+        file=UploadFile(BytesIO(pdf_bytes), filename="freedom-statement.pdf"),
+        session=session,  # type: ignore[arg-type]
+    )
+
+    files = [obj for obj in session.added_all if isinstance(obj, File)]
+    rows = [obj for obj in session.added_all if isinstance(obj, ImportRow)]
+    assert batch.source_type == "pdf"
+    assert batch.parser_version == "freedom-v1"
+    assert batch.original_filename == "freedom-statement.pdf"
+    assert files[0].content_type == "application/pdf"
+    assert files[0].size_bytes == len(pdf_bytes)
+    assert batch.file_size == len(pdf_bytes)
+    assert batch.total_rows == 2
+    assert rows[0].normalized_data["amount"] == "200000.00"
 
 
 async def test_upload_csv_import_creates_file_batch_and_rows() -> None:

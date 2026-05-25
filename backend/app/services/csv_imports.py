@@ -50,8 +50,9 @@ def _stable_hash(data: object) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def file_sha256(content: str) -> str:
-    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+def file_sha256(content: str | bytes) -> str:
+    payload = content if isinstance(content, bytes) else content.encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _get(

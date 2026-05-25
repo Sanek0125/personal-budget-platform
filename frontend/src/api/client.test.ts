@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { apiGet, apiPost, buildApiUrl } from "./client";
+import { apiGet, apiPost, apiPostForm, buildApiUrl } from "./client";
 
 describe("buildApiUrl", () => {
   it("joins configured base URL and path without duplicate slashes", () => {
@@ -116,6 +116,39 @@ describe("apiPost", () => {
         }),
       }),
     );
+
+    fetchMock.mockRestore();
+  });
+});
+
+describe("apiPostForm", () => {
+  it("sends multipart form data without forcing a JSON content type", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: "batch-1" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const formData = new FormData();
+    formData.append("file", new File(["%PDF-1.4"], "statement.pdf", { type: "application/pdf" }));
+
+    await expect(apiPostForm("/imports/upload-file", formData, { accessToken: "test-token" })).resolves.toEqual({
+      id: "batch-1",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/imports/upload-file",
+      expect.objectContaining({
+        method: "POST",
+        body: formData,
+        headers: expect.objectContaining({
+          Accept: "application/json",
+          Authorization: "Bearer test-token",
+        }),
+      }),
+    );
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(request.headers).not.toEqual(expect.objectContaining({ "Content-Type": expect.any(String) }));
 
     fetchMock.mockRestore();
   });
