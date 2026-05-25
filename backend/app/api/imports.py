@@ -26,7 +26,8 @@ from app.schemas.imports import (
     ImportConfirmResult,
     ImportRowRead,
 )
-from app.services.csv_imports import file_sha256, parse_csv_rows
+from app.services.csv_imports import file_sha256
+from app.services.import_parsers import parse_import_rows, parser_version
 from app.services.transaction_fingerprints import build_transaction_fingerprint
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/imports", tags=["imports"])
@@ -135,6 +136,18 @@ def _storage_key(workspace_id: UUID, sha256: str, filename: str) -> str:
     return f"imports/{workspace_id}/{sha256}/{safe_name}"
 
 
+def _import_source_type(payload: CsvImportUpload) -> str:
+    if payload.original_filename.lower().endswith(".pdf"):
+        return "pdf"
+    return "csv"
+
+
+def _import_content_type(payload: CsvImportUpload) -> str:
+    if payload.original_filename.lower().endswith(".pdf"):
+        return "application/pdf+text"
+    return "text/csv"
+
+
 @router.post(
     "/upload",
     response_model=ImportBatchRead,
@@ -150,14 +163,18 @@ async def upload_csv_import(
     account = await _get_workspace_account(session, workspace_id, payload.account_id)
     await _ensure_workspace_member(session, workspace_id, payload.user_id)
 
-    parsed_rows = parse_csv_rows(payload.content, payload.column_mapping)
+    parsed_rows = parse_import_rows(
+        payload.content,
+        parser_name=payload.parser_name,
+        column_mapping=payload.column_mapping,
+    )
     digest = file_sha256(payload.content)
     uploaded_file = File(
         id=uuid4(),
         workspace_id=workspace_id,
         uploaded_by_user_id=payload.user_id,
         original_filename=payload.original_filename,
-        content_type="text/csv",
+        content_type=_import_content_type(payload),
         size_bytes=len(payload.content.encode("utf-8")),
         storage_key=_storage_key(workspace_id, digest, payload.original_filename),
         sha256=digest,
@@ -168,14 +185,14 @@ async def upload_csv_import(
         user_id=payload.user_id,
         account_id=account.id,
         file_id=uploaded_file.id,
-        source_type="csv",
+        source_type=_import_source_type(payload),
         source_name=payload.source_name,
         original_filename=payload.original_filename,
         file_hash=digest,
         file_size=uploaded_file.size_bytes,
         status="parsed",
         total_rows=len(parsed_rows),
-        parser_version="csv-v1",
+        parser_version=parser_version(payload.parser_name),
     )
     rows = [
         ImportRow(

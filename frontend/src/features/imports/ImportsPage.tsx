@@ -1,12 +1,28 @@
-import { type FormEvent, useState } from "react";
+import { type ChangeEvent, type FormEvent, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { apiGet, apiPost } from "../../api/client";
 import type { Account, CsvImportUploadPayload, ImportBatch, ImportConfirmResult, ImportRow, User, Workspace } from "../../types";
 
+type ImportParserName = "generic_csv" | "freedom";
+
+function readFileAsText(file: File): Promise<string> {
+  if (typeof file.text === "function") {
+    return file.text();
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result ?? "")));
+    reader.addEventListener("error", () => reject(reader.error ?? new Error("Unable to read file")));
+    reader.readAsText(file);
+  });
+}
+
 export function ImportsPage({ activeWorkspace, currentUser }: { activeWorkspace?: Workspace; currentUser: User }) {
   const [accountId, setAccountId] = useState("");
   const [sourceName, setSourceName] = useState("");
+  const [parserName, setParserName] = useState<ImportParserName>("generic_csv");
   const [originalFilename, setOriginalFilename] = useState("");
   const [csvContent, setCsvContent] = useState("");
   const [currentBatch, setCurrentBatch] = useState<ImportBatch | null>(null);
@@ -18,6 +34,22 @@ export function ImportsPage({ activeWorkspace, currentUser }: { activeWorkspace?
     queryFn: () => apiGet<Account[]>(`/workspaces/${activeWorkspace?.id}/accounts`),
     enabled: Boolean(activeWorkspace),
   });
+
+  async function handleStatementFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const content = await readFileAsText(file);
+      setOriginalFilename(file.name);
+      setCsvContent(content);
+      setStatusMessage(`Selected file ${file.name}`);
+    } catch {
+      setStatusMessage("Unable to read selected file");
+    }
+  }
 
   async function handleUploadImport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -31,18 +63,24 @@ export function ImportsPage({ activeWorkspace, currentUser }: { activeWorkspace?
     }
 
     setStatusMessage(null);
+    const trimmedSourceName = sourceName.trim();
     const payload: CsvImportUploadPayload = {
       user_id: currentUser.id,
       account_id: accountId,
       original_filename: originalFilename.trim(),
       content: csvContent.trim(),
-      ...(sourceName.trim() ? { source_name: sourceName.trim() } : {}),
-      column_mapping: {
-        occurred_at: "Date",
-        amount: "Amount",
-        currency_code: "Currency",
-        description: "Description",
-      },
+      ...(trimmedSourceName ? { source_name: trimmedSourceName } : parserName === "freedom" ? { source_name: "Freedom Bank" } : {}),
+      ...(parserName === "freedom"
+        ? { parser_name: "freedom" }
+        : {
+            parser_name: "generic_csv",
+            column_mapping: {
+              occurred_at: "Date",
+              amount: "Amount",
+              currency_code: "Currency",
+              description: "Description",
+            },
+          }),
     };
 
     try {
@@ -82,7 +120,7 @@ export function ImportsPage({ activeWorkspace, currentUser }: { activeWorkspace?
     <section className="page-card imports-page">
       <p className="eyebrow">MVP module</p>
       <h2>Imports</h2>
-      <p>Upload CSV statements, preview normalized rows, and confirm them into transactions.</p>
+      <p>Upload CSV statements or parsed bank PDF statement text, preview normalized rows, and confirm them into transactions.</p>
 
       <div className="settings-grid">
         <form className="settings-panel" onSubmit={handleUploadImport}>
@@ -102,19 +140,42 @@ export function ImportsPage({ activeWorkspace, currentUser }: { activeWorkspace?
             </select>
           </label>
           <label>
+            Parser
+            <select value={parserName} onChange={(event) => setParserName(event.target.value as ImportParserName)}>
+              <option value="generic_csv">Generic CSV</option>
+              <option value="freedom">Freedom Bank</option>
+            </select>
+          </label>
+          <label>
             Source name
-            <input value={sourceName} onChange={(event) => setSourceName(event.target.value)} />
+            <input value={sourceName} onChange={(event) => setSourceName(event.target.value)} placeholder={parserName === "freedom" ? "Freedom Bank" : undefined} />
+          </label>
+          <label>
+            Statement file
+            <input accept=".csv,.txt,.pdf,text/csv,text/plain,application/pdf" type="file" onChange={(event) => void handleStatementFileChange(event)} />
           </label>
           <label>
             Original filename
-            <input value={originalFilename} onChange={(event) => setOriginalFilename(event.target.value)} required />
+            <input
+              value={originalFilename}
+              onChange={(event) => {
+                setOriginalFilename(event.target.value);
+              }}
+              required
+            />
           </label>
           <label>
-            CSV content
-            <textarea value={csvContent} onChange={(event) => setCsvContent(event.target.value)} required />
+            CSV content or statement text
+            <textarea
+              value={csvContent}
+              onChange={(event) => {
+                setCsvContent(event.target.value);
+              }}
+              required
+            />
           </label>
           <p>
-            Expected columns: <strong>Date, Amount, Currency, Description</strong>
+            Expected columns: <strong>{parserName === "freedom" ? "Freedom statement columns" : "Date, Amount, Currency, Description"}</strong>
           </p>
           <button type="submit" disabled={!activeWorkspace || !accountsQuery.data?.length}>Upload import</button>
           {currentBatch ? (

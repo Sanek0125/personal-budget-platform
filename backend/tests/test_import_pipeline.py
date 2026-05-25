@@ -16,6 +16,7 @@ from app.db.base import Base
 from app.models import Account, File, ImportBatch, ImportRow, Transaction
 from app.schemas.imports import CsvImportUpload
 from app.services.csv_imports import CsvColumnMapping, parse_csv_rows
+from app.services.import_parsers import parse_import_rows
 
 
 class _ScalarResult:
@@ -127,6 +128,71 @@ def _row(batch: ImportBatch, row_id=None, status="pending") -> ImportRow:
     )
 
 
+def _pdf_line(*parts: tuple[int, str]) -> str:
+    line = ""
+    for column, text in parts:
+        if len(line) < column:
+            line += " " * (column - len(line))
+        line += text
+    return line
+
+
+def _freedom_pdf_text_fixture() -> str:
+    return "\n".join(
+        [
+            "Выписка по текущему счету за период с 01.05.2026 по 31.05.2026",
+            "Счет: KZ000000000000000KZT",
+            "Клиент: Test Client",
+            "Валюта: KZT",
+            "Выписка по счету KZ000000000000000KZT",
+            _pdf_line(
+                (43, "бенефициара"),
+                (112, "Дебет"),
+                (121, "Кредит"),
+                (131, "Назначение платежа"),
+            ),
+            " операции     документа     бенефициара/",
+            "",
+            _pdf_line((131, "Дата и время")),
+            _pdf_line((131, "транзакции: 22.05.2026")),
+            _pdf_line((131, "17:13:24, номер карты:")),
+            _pdf_line((131, "5269****7519, сумма")),
+            _pdf_line((28, 'АО "Фридом'), (131, "транзакции: 200000 KZT,")),
+            _pdf_line((60, "общество"), (122, "200")),
+            _pdf_line(
+                (1, "22.05.2026"),
+                (16, "9397251"),
+                (31, "Банк"),
+                (42, "KSNVKZKA"),
+                (87, "KZ000000000000000KZT"),
+                (131, "операция: Зачисление на"),
+            ),
+            _pdf_line((58, "«Фридом Банк"), (121, "000.00")),
+            _pdf_line((28, 'Казахстан"'), (131, "счет, место выполнение")),
+            _pdf_line((60, "Казахстан»")),
+            _pdf_line((131, "P2P_KGDM_Credit>Almaty")),
+            _pdf_line((131, "РРН:614212829378")),
+            "",
+            _pdf_line((28, 'АО "Фридом'), (60, "Test Client")),
+            _pdf_line((114, "7")),
+            _pdf_line(
+                (1, "13.05.2026"),
+                (16, "5206342"),
+                (31, "Банк"),
+                (42, "KSNVKZKA"),
+                (60, "Test Client"),
+                (73, "000000000000"),
+                (87, "KZ000000000000000KZT"),
+                (131, "Конвертация"),
+            ),
+            _pdf_line((112, "405.67")),
+            _pdf_line((28, 'Казахстан"'), (60, "Test Client")),
+            "",
+            "Исходящий остаток: 0.00",
+        ]
+    )
+
+
 def test_import_models_are_registered_with_metadata() -> None:
     assert File.__tablename__ == "files"
     assert ImportBatch.__tablename__ == "import_batches"
@@ -202,6 +268,96 @@ def test_parse_csv_rows_normalizes_rows_and_hashes() -> None:
     assert rows[0].normalized_data["amount"] == "-12.34"
     assert rows[0].raw_hash
     assert rows[0].normalized_hash
+
+
+def test_parse_freedom_rows_normalizes_semicolon_statement() -> None:
+    content = (
+        "Дата операции;Дата обработки;Описание;Сумма;Валюта;ID операции\n"
+        "23.05.2026 14:35;24.05.2026;MAGNUM;−1 234,56;KZT;freedom-1\n"
+    )
+
+    rows = parse_import_rows(content, parser_name="freedom", column_mapping=None)
+
+    assert len(rows) == 1
+    assert rows[0].row_number == 1
+    assert rows[0].raw_data["Описание"] == "MAGNUM"
+    assert rows[0].normalized_data == {
+        "type": "expense",
+        "occurred_at": "2026-05-23T14:35:00+00:00",
+        "amount": "-1234.56",
+        "currency_code": "KZT",
+        "description": "MAGNUM",
+        "booked_at": "2026-05-24T00:00:00+00:00",
+        "merchant_raw": "MAGNUM",
+        "external_id": "freedom-1",
+    }
+    assert rows[0].raw_hash
+    assert rows[0].normalized_hash
+
+
+def test_parse_freedom_rows_uses_debit_credit_columns() -> None:
+    content = (
+        "Date,Description,Debit,Credit,Currency,Transaction ID\n"
+        "2026-05-23,Salary,,5000.00,USD,income-1\n"
+        "2026-05-24,Coffee,4.50,,USD,expense-1\n"
+    )
+
+    rows = parse_import_rows(content, parser_name="freedom", column_mapping=None)
+
+    assert rows[0].normalized_data["type"] == "income"
+    assert rows[0].normalized_data["amount"] == "5000.00"
+    assert rows[1].normalized_data["type"] == "expense"
+    assert rows[1].normalized_data["amount"] == "-4.50"
+
+
+def test_parse_freedom_pdf_text_statement_extracts_wrapped_debit_credit_rows() -> None:
+    rows = parse_import_rows(
+        _freedom_pdf_text_fixture(), parser_name="freedom", column_mapping=None
+    )
+
+    assert len(rows) == 2
+    assert rows[0].raw_data["document_number"] == "9397251"
+    assert rows[0].normalized_data["type"] == "income"
+    assert rows[0].normalized_data["occurred_at"] == "2026-05-22T17:13:24+00:00"
+    assert rows[0].normalized_data["amount"] == "200000.00"
+    assert rows[0].normalized_data["currency_code"] == "KZT"
+    assert rows[0].normalized_data["external_id"] == "614212829378"
+    assert "Зачисление на счет" in rows[0].normalized_data["description"]
+    assert rows[1].raw_data["document_number"] == "5206342"
+    assert rows[1].normalized_data["type"] == "expense"
+    assert rows[1].normalized_data["amount"] == "-7405.67"
+    assert rows[1].normalized_data["description"] == "Конвертация"
+
+
+async def test_upload_freedom_import_creates_file_batch_and_rows_without_mapping(
+) -> None:
+    workspace_id = uuid4()
+    account = _account(workspace_id)
+    user_id = uuid4()
+    session = _FakeAsyncSession(workspace_id, account, user_id)
+
+    batch = await upload_csv_import(
+        workspace_id,
+        CsvImportUpload(
+            user_id=user_id,
+            account_id=account.id,
+            original_filename="freedom.pdf",
+            content=_freedom_pdf_text_fixture(),
+            parser_name="freedom",
+            source_name="Freedom Bank",
+        ),
+        session,  # type: ignore[arg-type]
+    )
+
+    files = [obj for obj in session.added_all if isinstance(obj, File)]
+    rows = [obj for obj in session.added_all if isinstance(obj, ImportRow)]
+    assert batch.parser_version == "freedom-v1"
+    assert batch.source_name == "Freedom Bank"
+    assert batch.source_type == "pdf"
+    assert files[0].content_type == "application/pdf+text"
+    assert batch.total_rows == 2
+    assert rows[1].normalized_data["description"] == "Конвертация"
+    assert rows[1].normalized_data["amount"] == "-7405.67"
 
 
 async def test_upload_csv_import_creates_file_batch_and_rows() -> None:
