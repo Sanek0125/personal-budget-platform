@@ -1990,7 +1990,7 @@ describe("App shell", () => {
     );
   });
 
-  it("uploads a Freedom import with the bank parser", async () => {
+  it("uploads a raw Freedom PDF import with the bank parser", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(authMeResponse())
@@ -2035,9 +2035,9 @@ describe("App shell", () => {
             user_id: "00000000-0000-0000-0000-000000000001",
             account_id: "44444444-4444-4444-4444-444444444444",
             file_id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
-            source_type: "csv",
+            source_type: "pdf",
             source_name: "Freedom Bank",
-            original_filename: "freedom.csv",
+            original_filename: "freedom-statement.pdf",
             file_hash: "hash-1",
             file_size: 72,
             status: "parsed",
@@ -2085,29 +2085,33 @@ describe("App shell", () => {
     await user.click(await screen.findByRole("link", { name: /imports/i }));
     await user.selectOptions(await screen.findByLabelText(/target account/i), "44444444-4444-4444-4444-444444444444");
     await user.selectOptions(screen.getByLabelText(/parser/i), "freedom");
-    await user.type(screen.getByLabelText(/original filename/i), "freedom.csv");
-    await user.type(
-      screen.getByLabelText(/csv content/i),
-      "Дата операции;Описание;Сумма;Валюта{enter}23.05.2026;MAGNUM;-1234,56;KZT",
-    );
+    const pdfFile = new File([new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34])], "freedom-statement.pdf", {
+      type: "application/pdf",
+    });
+    await user.upload(screen.getByLabelText(/statement file/i), pdfFile);
     await user.click(screen.getByRole("button", { name: /upload import/i }));
 
-    expect(await screen.findByText(/uploaded import freedom.csv/i)).toBeInTheDocument();
+    expect(await screen.findByText(/uploaded import freedom-statement.pdf/i)).toBeInTheDocument();
     expect(await screen.findByText("MAGNUM")).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/imports/upload",
+    const rawPdfUploadCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).endsWith("/workspaces/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/imports/upload-file"),
+    );
+    expect(rawPdfUploadCall).toBeDefined();
+    const request = rawPdfUploadCall?.[1] as RequestInit;
+    expect(request.method).toBe("POST");
+    expect(request.headers).toEqual(
       expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({
-          user_id: "00000000-0000-0000-0000-000000000001",
-          account_id: "44444444-4444-4444-4444-444444444444",
-          original_filename: "freedom.csv",
-          content: "Дата операции;Описание;Сумма;Валюта\n23.05.2026;MAGNUM;-1234,56;KZT",
-          source_name: "Freedom Bank",
-          parser_name: "freedom",
-        }),
+        Accept: "application/json",
+        Authorization: "Bearer test-token",
       }),
     );
+    expect(request.headers).not.toEqual(expect.objectContaining({ "Content-Type": expect.any(String) }));
+    const body = request.body as FormData;
+    expect(body.get("user_id")).toBe("00000000-0000-0000-0000-000000000001");
+    expect(body.get("account_id")).toBe("44444444-4444-4444-4444-444444444444");
+    expect(body.get("parser_name")).toBe("freedom");
+    expect(body.get("source_name")).toBe("Freedom Bank");
+    expect(body.get("file")).toBe(pdfFile);
   });
 
   it("confirms an uploaded import batch", async () => {

@@ -3,7 +3,18 @@ from decimal import Decimal
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
+from fastapi import (
+    File as UploadFileParam,
+)
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,8 +37,9 @@ from app.schemas.imports import (
     ImportConfirmResult,
     ImportRowRead,
 )
-from app.services.csv_imports import file_sha256
+from app.services.csv_imports import CsvColumnMapping, file_sha256
 from app.services.import_parsers import parse_import_rows, parser_version
+from app.services.pdf_text import extract_pdf_text_from_bytes
 from app.services.transaction_fingerprints import build_transaction_fingerprint
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/imports", tags=["imports"])
@@ -148,51 +160,55 @@ def _import_content_type(payload: CsvImportUpload) -> str:
     return "text/csv"
 
 
-@router.post(
-    "/upload",
-    response_model=ImportBatchRead,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_workspace_writer)],
-)
-async def upload_csv_import(
+async def _create_import_batch_from_content(
     workspace_id: UUID,
-    payload: CsvImportUpload,
-    session: SessionDep,
+    *,
+    user_id: UUID,
+    account_id: UUID,
+    original_filename: str,
+    content: str,
+    stored_content: bytes,
+    parser_name: str,
+    column_mapping: object | None,
+    source_name: str | None,
+    source_type: str,
+    content_type: str,
+    session: AsyncSession,
 ) -> ImportBatch:
     await _ensure_workspace_exists(session, workspace_id)
-    account = await _get_workspace_account(session, workspace_id, payload.account_id)
-    await _ensure_workspace_member(session, workspace_id, payload.user_id)
+    account = await _get_workspace_account(session, workspace_id, account_id)
+    await _ensure_workspace_member(session, workspace_id, user_id)
 
     parsed_rows = parse_import_rows(
-        payload.content,
-        parser_name=payload.parser_name,
-        column_mapping=payload.column_mapping,
+        content,
+        parser_name=parser_name,
+        column_mapping=column_mapping,  # type: ignore[arg-type]
     )
-    digest = file_sha256(payload.content)
+    digest = file_sha256(stored_content)
     uploaded_file = File(
         id=uuid4(),
         workspace_id=workspace_id,
-        uploaded_by_user_id=payload.user_id,
-        original_filename=payload.original_filename,
-        content_type=_import_content_type(payload),
-        size_bytes=len(payload.content.encode("utf-8")),
-        storage_key=_storage_key(workspace_id, digest, payload.original_filename),
+        uploaded_by_user_id=user_id,
+        original_filename=original_filename,
+        content_type=content_type,
+        size_bytes=len(stored_content),
+        storage_key=_storage_key(workspace_id, digest, original_filename),
         sha256=digest,
     )
     batch = ImportBatch(
         id=uuid4(),
         workspace_id=workspace_id,
-        user_id=payload.user_id,
+        user_id=user_id,
         account_id=account.id,
         file_id=uploaded_file.id,
-        source_type=_import_source_type(payload),
-        source_name=payload.source_name,
-        original_filename=payload.original_filename,
+        source_type=source_type,
+        source_name=source_name,
+        original_filename=original_filename,
         file_hash=digest,
         file_size=uploaded_file.size_bytes,
         status="parsed",
         total_rows=len(parsed_rows),
-        parser_version=parser_version(payload.parser_name),
+        parser_version=parser_version(parser_name),
     )
     rows = [
         ImportRow(
@@ -217,6 +233,121 @@ async def upload_csv_import(
         raise _conflict(exc) from exc
     await session.refresh(batch)
     return batch
+
+
+@router.post(
+    "/upload",
+    response_model=ImportBatchRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_workspace_writer)],
+)
+async def upload_csv_import(
+    workspace_id: UUID,
+    payload: CsvImportUpload,
+    session: SessionDep,
+) -> ImportBatch:
+    return await _create_import_batch_from_content(
+        workspace_id,
+        user_id=payload.user_id,
+        account_id=payload.account_id,
+        original_filename=payload.original_filename,
+        content=payload.content,
+        stored_content=payload.content.encode("utf-8"),
+        parser_name=payload.parser_name,
+        column_mapping=payload.column_mapping,
+        source_name=payload.source_name,
+        source_type=_import_source_type(payload),
+        content_type=_import_content_type(payload),
+        session=session,
+    )
+
+
+@router.post(
+    "/upload-file",
+    response_model=ImportBatchRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_workspace_writer)],
+)
+async def upload_import_file(
+    workspace_id: UUID,
+    user_id: Annotated[UUID, Form()],
+    account_id: Annotated[UUID, Form()],
+    file: Annotated[UploadFile, UploadFileParam()],
+    session: SessionDep,
+    parser_name: Annotated[str, Form()] = "generic_csv",
+    source_name: Annotated[str | None, Form()] = None,
+) -> ImportBatch:
+    if file is None or not file.filename:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Import file is required",
+        )
+    original_filename = file.filename.strip()
+    lowered = original_filename.lower()
+    if not lowered.endswith((".csv", ".txt", ".pdf")):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Imports require a .csv, .pdf, or .txt filename",
+        )
+
+    raw_content = await file.read()
+    if not raw_content:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Import file is empty",
+        )
+
+    normalized_parser_name = parser_name.strip().lower()
+    if lowered.endswith(".pdf"):
+        content = extract_pdf_text_from_bytes(raw_content)
+        source_type = "pdf"
+        content_type = file.content_type or "application/pdf"
+    else:
+        try:
+            content = raw_content.decode("utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Import file must be UTF-8 text or PDF",
+            ) from exc
+        source_type = "csv" if lowered.endswith(".csv") else "text"
+        content_type = file.content_type or (
+            "text/csv" if source_type == "csv" else "text/plain"
+        )
+
+    payload = CsvImportUpload(
+        user_id=user_id,
+        account_id=account_id,
+        original_filename=original_filename,
+        content=content,
+        parser_name=normalized_parser_name,
+        source_name=source_name,
+        column_mapping=(
+            CsvColumnMapping(
+                occurred_at="Date",
+                amount="Amount",
+                currency_code="Currency",
+                description="Description",
+            )
+            if normalized_parser_name == "generic_csv"
+            else None
+        ),
+    )
+
+    return await _create_import_batch_from_content(
+        workspace_id,
+        user_id=payload.user_id,
+        account_id=payload.account_id,
+        original_filename=payload.original_filename,
+        content=payload.content,
+        stored_content=raw_content,
+        parser_name=payload.parser_name,
+        column_mapping=payload.column_mapping,
+        source_name=payload.source_name,
+        source_type=source_type,
+        content_type=content_type,
+        session=session,
+    )
 
 
 @router.get(

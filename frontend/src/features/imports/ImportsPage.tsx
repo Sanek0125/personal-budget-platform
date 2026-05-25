@@ -1,7 +1,7 @@
 import { type ChangeEvent, type FormEvent, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { apiGet, apiPost } from "../../api/client";
+import { apiGet, apiPost, apiPostForm } from "../../api/client";
 import type { Account, CsvImportUploadPayload, ImportBatch, ImportConfirmResult, ImportRow, User, Workspace } from "../../types";
 
 type ImportParserName = "generic_csv" | "freedom";
@@ -25,6 +25,7 @@ export function ImportsPage({ activeWorkspace, currentUser }: { activeWorkspace?
   const [parserName, setParserName] = useState<ImportParserName>("generic_csv");
   const [originalFilename, setOriginalFilename] = useState("");
   const [csvContent, setCsvContent] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [currentBatch, setCurrentBatch] = useState<ImportBatch | null>(null);
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -42,8 +43,14 @@ export function ImportsPage({ activeWorkspace, currentUser }: { activeWorkspace?
     }
 
     try {
-      const content = await readFileAsText(file);
+      setSelectedFile(file);
       setOriginalFilename(file.name);
+      if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+        setCsvContent("");
+        setStatusMessage(`Selected file ${file.name}`);
+        return;
+      }
+      const content = await readFileAsText(file);
       setCsvContent(content);
       setStatusMessage(`Selected file ${file.name}`);
     } catch {
@@ -64,30 +71,45 @@ export function ImportsPage({ activeWorkspace, currentUser }: { activeWorkspace?
 
     setStatusMessage(null);
     const trimmedSourceName = sourceName.trim();
-    const payload: CsvImportUploadPayload = {
-      user_id: currentUser.id,
-      account_id: accountId,
-      original_filename: originalFilename.trim(),
-      content: csvContent.trim(),
-      ...(trimmedSourceName ? { source_name: trimmedSourceName } : parserName === "freedom" ? { source_name: "Freedom Bank" } : {}),
-      ...(parserName === "freedom"
-        ? { parser_name: "freedom" }
-        : {
-            parser_name: "generic_csv",
-            column_mapping: {
-              occurred_at: "Date",
-              amount: "Amount",
-              currency_code: "Currency",
-              description: "Description",
-            },
-          }),
-    };
+    const isRawPdfUpload = Boolean(selectedFile && originalFilename.trim().toLowerCase().endsWith(".pdf"));
 
     try {
-      const batch = await apiPost<ImportBatch, CsvImportUploadPayload>(
-        `/workspaces/${activeWorkspace.id}/imports/upload`,
-        payload,
-      );
+      let batch: ImportBatch;
+      if (isRawPdfUpload && selectedFile) {
+        const formData = new FormData();
+        formData.append("user_id", currentUser.id);
+        formData.append("account_id", accountId);
+        formData.append("parser_name", parserName);
+        const resolvedSourceName = trimmedSourceName || (parserName === "freedom" ? "Freedom Bank" : "");
+        if (resolvedSourceName) {
+          formData.append("source_name", resolvedSourceName);
+        }
+        formData.append("file", selectedFile);
+        batch = await apiPostForm<ImportBatch>(`/workspaces/${activeWorkspace.id}/imports/upload-file`, formData);
+      } else {
+        const payload: CsvImportUploadPayload = {
+          user_id: currentUser.id,
+          account_id: accountId,
+          original_filename: originalFilename.trim(),
+          content: csvContent.trim(),
+          ...(trimmedSourceName ? { source_name: trimmedSourceName } : parserName === "freedom" ? { source_name: "Freedom Bank" } : {}),
+          ...(parserName === "freedom"
+            ? { parser_name: "freedom" }
+            : {
+                parser_name: "generic_csv",
+                column_mapping: {
+                  occurred_at: "Date",
+                  amount: "Amount",
+                  currency_code: "Currency",
+                  description: "Description",
+                },
+              }),
+        };
+        batch = await apiPost<ImportBatch, CsvImportUploadPayload>(
+          `/workspaces/${activeWorkspace.id}/imports/upload`,
+          payload,
+        );
+      }
       const rows = await apiGet<ImportRow[]>(`/workspaces/${activeWorkspace.id}/imports/${batch.id}/rows`);
       setCurrentBatch(batch);
       setImportRows(rows);
@@ -120,7 +142,7 @@ export function ImportsPage({ activeWorkspace, currentUser }: { activeWorkspace?
     <section className="page-card imports-page">
       <p className="eyebrow">MVP module</p>
       <h2>Imports</h2>
-      <p>Upload CSV statements or parsed bank PDF statement text, preview normalized rows, and confirm them into transactions.</p>
+      <p>Upload CSV statements or raw bank PDF statements, preview normalized rows, and confirm them into transactions.</p>
 
       <div className="settings-grid">
         <form className="settings-panel" onSubmit={handleUploadImport}>
@@ -165,13 +187,13 @@ export function ImportsPage({ activeWorkspace, currentUser }: { activeWorkspace?
             />
           </label>
           <label>
-            CSV content or statement text
+            CSV content / extracted PDF text preview
             <textarea
               value={csvContent}
-              onChange={(event) => {
-                setCsvContent(event.target.value);
-              }}
-              required
+              onChange={(event) => setCsvContent(event.target.value)}
+              placeholder="Date,Amount,Currency,Description\n2026-05-21,-12.34,RUB,Lunch"
+              rows={8}
+              required={!selectedFile?.name.toLowerCase().endsWith(".pdf")}
             />
           </label>
           <p>

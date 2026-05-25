@@ -87,3 +87,15 @@ export async function apiPost<TResponse, TPayload extends object>(
 
   return parseResponse<TResponse>(response);
 }
+
+export async function apiPostForm<TResponse>(path: string, formData: FormData, init?: ApiRequestOptions): Promise<TResponse> {
+  const requestInit = sanitizeRequestInit(init);
+  const response = await fetch(buildApiUrl(path), {
+    ...requestInit,
+    method: "POST",
+    headers: buildHeaders(init),
+    body: formData,
+  });
+
+  return parseResponse<TResponse>(response);
+}
